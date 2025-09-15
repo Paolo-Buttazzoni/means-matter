@@ -1,4 +1,4 @@
-tiebreaker = read.csv('Do Means Matter Open Ended Responses - tiebreaker.csv') %>%
+tiebreaker = read.csv('study2a/Do Means Matter Open Ended Responses - tiebreaker.csv') %>%
   select(justID, resolve, category)
 
 glimpse(codesIJ)

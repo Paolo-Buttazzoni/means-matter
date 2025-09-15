@@ -1,30 +1,4 @@
-# Load necessary libraries
-library(tidyverse)
-library(emmeans)
-library(effectsize)
-library(interactions)
-library(psych)
 
-#'Do means matter morally?' study 2
-# --- Step 1: Load and Clean Data ---
-
-# Load dataset
-filename = "mmm_studyA.csv"
-headers = read_csv(filename, col_names = FALSE, n_max = 1)
-ge2raw = read_csv(filename, skip = 3, col_names = FALSE)
-colnames(ge2raw) = headers
-
-# Filter to complete responses
-ge2 = ge2raw %>%
-  filter(Progress == 100, !is.na(PROLIFIC_PID)) %>%
-  mutate(
-    Endorsement = case_when(choice == 4 ~ "Difference",
-                            choice == 5 ~ "Equivalence"),
-    Conservatism = (politics_1 + politics_2) / 2,
-    Religiosity = religiosity_1,
-    Social = politics_2,
-    Fiscal = politics_1
-  )
 
 # --- Step 2: Test Whether Endorsements are Balanced (Chi-square, Prop Test) ---
 

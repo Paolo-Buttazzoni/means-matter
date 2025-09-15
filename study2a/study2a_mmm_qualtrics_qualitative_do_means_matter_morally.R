@@ -8,34 +8,59 @@ library(ggrepel)
 library(viridis) # For color-blind-friendly palettes
 
 # Function to Read and Prepare Data
-read_and_prepare_data <- function(filename) {
+read_qualtrics <- function(filename) {
   headers <- read_csv(filename, col_names = FALSE, n_max = 1) %>% as.character()
   data <- read_csv(filename, skip = 3, col_names = FALSE)
   colnames(data) <- headers
-  data %>%
-    filter(Progress == 100, !is.na(PROLIFIC_PID)) %>%
-    mutate(
-      Endorsement = if_else(choice == 4, 'Difference', 'Equivalence'),
-      Conservatism = (politics_1 + politics_2 + politics_3) / 3,
-      Religiosity = religiosity_1,
-      Social = politics_3,
-      Fiscal = politics_2,
-      strata = factor(STUDY_ID, labels = c('Left_UK', 'Left_UK', 'Right_UK', 'Right_UK', 
-                                           'Right_US', 'Right_US', 'Left_US', 'Left_US')),
-      #left/right -> L/R
-      politics = str_sub(strata, 1, 1),
-      #extract UK or US
-      country = str_sub(strata, -2)
-    )
+  return(data)
 }
 
 #Qualitative_Do_Means_Matter_Morally!!
 
 # Load Data
-ge1 <- read_and_prepare_data('meansmatter1.csv')
+mm2a <- read_qualtrics('study2a/study2a.csv')
+
+mm2a = mm2a %>%
+  filter(Progress == 100, !is.na(PROLIFIC_PID)) %>%
+  mutate(
+    Endorsement = if_else(choice == 4, 'Difference', 'Equivalence'),
+    Conservatism = (politics_1 + politics_2 + politics_3) / 3,
+    Religiosity = religiosity_1,
+    Social = politics_3,
+    Fiscal = politics_2,
+    strata = factor(STUDY_ID, labels = c('Left_UK', 'Left_UK', 'Right_UK', 'Right_UK', 
+                                         'Right_US', 'Right_US', 'Left_US', 'Left_US')),
+    #left/right -> L/R
+    politics = str_sub(strata, 1, 1),
+    #extract UK or US
+    country = str_sub(strata, -2))
+
+xtabs(~ Endorsement, mm2a)
+prop.test(xtabs(~ Endorsement, mm2a), p = .5)
+
+mm2a = mm2a %>%
+  mutate(length_char = if_else(!is.na(reasonsDiff), 
+                               nchar(reasonsDiff), nchar(reasonsEquiv)), 
+         spaces = if_else(!is.na(reasonsDiff), 
+                          str_count(reasonsDiff, pattern = " "), str_count(reasonsEquiv, pattern = " ")))
+
+ggplot(mm2a, aes(x= length_char, fill = Endorsement)) + 
+  geom_density(alpha = .5) + 
+  theme_bw() + 
+  scale_x_log10(name = "Justification\n(length in characters)", 
+                     limits = c(20, 3000), 
+                breaks = c(30, 100, 300, 1000)) + 
+  theme(legend.position = c(.7, .7))
+  
+wilcox.test(length_char ~ Endorsement, mm2a)
+
+DescTools::MedianCI(mm2a$length_char)
+quantile(mm2a$length_char)
+quantile(mm2a$spaces)
+
 
 # Descriptive Statistics
-ge1 %>%
+mm2a %>%
   group_by(Endorsement) %>%
   summarise(
     mean_age = mean(age, na.rm = TRUE),
@@ -50,18 +75,11 @@ ge1 %>%
   View(.)
 
 
-#to add chi sq test depending
-endorsement_counts <- ge1 %>%
-  count(Endorsement)
-print(endorsement_counts)
-chisq_test_result <- chisq.test(endorsement_counts$n)
-
-print(chisq_test_result)
 
 # Relpref for Calculation and Plotting (Diff - Equiv)
 
-ge1 <- ge1 %>% mutate(relpref = rating_1 - rating_2)
-lm(relpref ~ Endorsement, ge1)
+mm2a <- mm2a %>% mutate(relpref = rating_1 - rating_2)
+lm(relpref ~ Endorsement, mm2a)
 
 
 #Other stuff
@@ -98,7 +116,7 @@ alpha_result <- ge1 %>%
 
 
 set.seed(123)  # Set seed for reproducible jitter
-ggplot(ge1, aes(x = Religiosity, y = relpref)) +
+ggplot(mm2a, aes(x = Religiosity, y = relpref)) +
   geom_jitter(width = 0.2, height = 0.2) +  # Consistent jitter
   geom_smooth() +
   labs(title = 'Religiosity vs Relative Preference',
@@ -115,7 +133,7 @@ strata_means <- ge1 %>%
   )
 
 # Reshape Data for Figure 1
-fig1 <- ge1 %>%
+fig1 <- mm2a %>%
   select(Difference = rating_1, Equivalence = rating_2, country, politics) %>%
   gather(Difference:Equivalence, key = 'key', value = 'Rating')
 
