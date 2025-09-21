@@ -79,7 +79,8 @@ mm2a %>%
 # Relpref for Calculation and Plotting (Diff - Equiv)
 
 mm2a <- mm2a %>% mutate(relpref = rating_1 - rating_2)
-lm(relpref ~ Endorsement, mm2a)
+lm(relpref ~ Endorsement, mm2a) %>%
+  jtools::summ(.)
 
 
 #Other stuff
@@ -142,12 +143,12 @@ View(strata_means)
 View(fig1)
 
 # Prepare Data for Justification Analysis
-just1 <- ge1 %>%
+just1 <- mm2a %>%
   select(reasonsDiff, reasonsEquiv, Endorsement, PROLIFIC_PID) %>%
   pivot_longer(cols = starts_with('reasons'), names_to = 'key', values_to = 'response', values_drop_na = TRUE) %>%
   select(-key)
 
-write.csv(just1, 'justifications.csv', row.names = FALSE)
+write.csv(just1, 'study2a/justifications.csv', row.names = FALSE)
 
 # Function to Process Coder Data
 process_coder_data <- function(filename) {
@@ -162,8 +163,8 @@ process_coder_data <- function(filename) {
     arrange(justID)
 }
 
-codesI <- process_coder_data('Do Means Matter Open Ended Responses - Ivar.csv')
-codesJ <- process_coder_data('Do Means Matter Open Ended Responses - Jon.csv')
+codesI <- process_coder_data('study2a/Do Means Matter Open Ended Responses - Ivar.csv')
+codesJ <- process_coder_data('study2a/Do Means Matter Open Ended Responses - Jon.csv')
 
 # Combine and Analyze Coder Data
 codesI <- codesI %>% pivot_longer(cols = -c(justID, PROLIFIC_PID), names_to = 'category', values_to = 'c1resp')
@@ -182,12 +183,51 @@ cohen_kappa <- psych::cohen.kappa(x = cbind(codesIJ$c1resp, codesIJ$c2resp))
 # Visualization Preserved
 tempdt <- codesIJ %>%
   filter(present == 'Present') %>%
-  left_join(ge1, by = 'PROLIFIC_PID') %>%
+  left_join(mm2a, by = 'PROLIFIC_PID') %>%
   mutate(difference = Endorsement == 'Difference')
 
 jmod <- glm(difference ~ category, tempdt, family = 'binomial')
 fig1 <- as.data.frame(emmeans(jmod, ~ category, adjust = 'none', type = 'response'))
 
+
+mm2a = codesIJ %>%
+  mutate(just_value = present == 'Present') %>%
+  full_join(mm2a, by = 'PROLIFIC_PID')
+
+mod_just = glmer(just_value ~ category * Endorsement + (1 | PROLIFIC_PID), 
+               mm2a, family = 'binomial')
+emmeans(mod_just, pairwise ~ Endorsement | category, type = 'response')
+
+tempdt %>%
+  group_by(category) %>%
+  summarise(mean_diff = mean(difference, na.rm = TRUE) - .5, 
+            freq = n()) %>%
+  ggplot(aes(x = mean_diff, y = freq)) + 
+  annotate(geom = 'rect', xmin = -.5, xmax = 0, ymin = 0, ymax = Inf, fill = 'grey', 
+           alpha = .3) +
+  annotate(geom = 'rect', xmin = 0, xmax = .5, ymin = 0, ymax = Inf, fill = 'firebrick', 
+           alpha = .3) +
+  geom_vline(xintercept = 0, linetype = 2, color = 'white', linewidth = 1) +
+  theme_classic() +
+  geom_col(width = .005, position = 'identity') + 
+  geom_point(size = 1, fill = 'white', shape = 21, stroke = 1, color = 'black') +
+  ggrepel::geom_label_repel(aes(label = category), xlim = c(-.5, .5), 
+                           fontface = 'bold') + 
+  scale_y_continuous(name = 'Frequency', limits = c(0, 30), expand = c(0, 0)) + 
+  scale_x_continuous(name = 'Mean endorsement', limits = c(-.5, .53), 
+                     labels = c('Equivalence', 'Both\nequally', 'Difference'), 
+                     breaks = c(-.4, 0, .42),
+                     expand = c(0, 0)) + 
+  theme(axis.ticks = element_blank(),
+        axis.title = element_text(size = 12, face = 'bold'),
+        axis.text = element_text(size = 12),
+        legend.position = 'bottom',
+        plot.margin = margin(0.3,1,0.3, 1, "cm"),
+        legend.title = element_text(size = 10))
+
+ggsave('Figures/Figure2.jpg', dpi = 300, width = 13, height = 13, units = 'cm')
+  
+xtabs(~ category, tempdt)
 
 #categories at the top have lower probability of endorsing "Difference" view
 
@@ -200,7 +240,7 @@ ggplot(fig1, aes(x = reorder(category, -prob), y = 1 - prob, label = category, c
     y = 'Probability of Endorsing "Equivalence" View',
     color = 'Probability of\nEndorsing "Difference" View'
   ) +
-  scale_color_viridis(option = "D", direction = -1) +  # Color-blind-friendly gradient
+ # scale_color_viridis(option = "D", direction = -1) +  # Color-blind-friendly gradient
   theme_minimal() +
   theme(
     axis.title = element_text(size = 12),
@@ -356,4 +396,7 @@ ggplot(fig1b, aes(x = Conservatism, y = 1 - prob, label = Category, color = Endo
     axis.text = element_text(size = 12),
     legend.position = "top"
   )
+
+temp_dt
+
 

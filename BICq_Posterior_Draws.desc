@@ -1,0 +1,5 @@
+new("big.matrix.descriptor", description = list(sharedType = "FileBacked", 
+    filename = "BICq_Posterior_Draws.bin", dirname = "./", totalRows = 10000L, 
+    totalCols = 11L, rowOffset = c(0, 10000), colOffset = c(0, 
+    11), nrow = 10000, ncol = 11, rowNames = NULL, colNames = NULL, 
+    type = "double", separated = FALSE))

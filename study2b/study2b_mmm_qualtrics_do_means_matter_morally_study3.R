@@ -2,33 +2,34 @@ library(tidyverse)
 library(readr)
 
 #This one is 'Do means matter morally?' study 3
-filename = "mmm_study3.csv"
+filename = "study2b/study2b.csv"
 headers = read_csv(filename, col_names = FALSE, n_max = 1)
-ge3raw = read_csv(filename, skip = 3, col_names = FALSE)
-colnames(ge3raw)= headers
+mm2b = read_csv(filename, skip = 3, col_names = FALSE)
+colnames(mm2b)= headers
 
-glimpse(ge3raw)
+glimpse(mm2b)
 
-pdata3 = ge3raw %>%
+mm2b_demog = mm2b %>%
   select(Progress, Duration = `Duration (in seconds)`, RecordedDate, PROLIFIC_PID, Condition, Scenario, 
          age:politics_2, Comp1 = Q544, Comp2 = Q545, choice, rating = rating_1) %>%
   filter(!is.na(PROLIFIC_PID), Progress == 100, !is.na(choice))
-glimpse(pdata3)
-View(pdata3)
-pdata3 %>% 
+
+glimpse(mm2b_demog)
+
+mm2b_demog %>% 
   select(PROLIFIC_PID) %>%
   distinct()
 
 #previous code to load, filter and format data
 #make a historgram of how long people took for survey
-hist(pdata3$Duration)
+#hist(pdata3$Duration)
 
 #demographic traits
-t.test(religiosity_1 ~ choice, pdata3)
-t.test(politics_1 ~ choice, pdata3)
-t.test(politics_2 ~ choice, pdata3)
-t.test(age ~ choice, pdata3)
-xtabs(~ gender + choice, pdata3)
+#t.test(religiosity_1 ~ choice, pdata3)
+#t.test(politics_1 ~ choice, pdata3)
+#t.test(politics_2 ~ choice, pdata3)
+#t.test(age ~ choice, pdata3)
+#xtabs(~ gender + choice, pdata3)
 
 #M1 approve or disapprove of action
 #M2 should other people be encouraged or discouraged?
@@ -37,7 +38,7 @@ m1pos = (1:22)*3 - 2
 m2pos = (1:22)*3 - 1
 m3pos = (1:22)*3 
 
-mdata3 = ge3raw %>%
+mm2b_resps = mm2b %>%
   select(Q167_1:Q730_4, PROLIFIC_PID) %>%
   select(ends_with(c("_4")), PROLIFIC_PID) %>%
   mutate(moral1 = rowSums(.[m1pos], na.rm = TRUE),
@@ -45,29 +46,28 @@ mdata3 = ge3raw %>%
          moral3 = rowSums(.[m3pos], na.rm = TRUE)) %>%
   select(PROLIFIC_PID:moral3)
 
-glimpse(mdata3)
+glimpse(mm2b_resps)
 
-mm3 = full_join(pdata3, mdata3, by = 'PROLIFIC_PID') %>%
-  mutate(moral = (moral1 + moral2 + moral3)/3)
+mm2b_clean = full_join(mm2b_resps, mm2b_demog, by = 'PROLIFIC_PID') %>%
+  mutate(moral = (moral1 + moral2 + moral3)/3) %>%
+  filter(!is.na(PROLIFIC_PID), !is.na(Condition), !is.na(Scenario))
 
-glimpse(mm3)
+glimpse(mm2b_clean)
 
-t.test(moral ~ Condition, mm3)
+t.test(moral ~ Condition, mm2b_clean)
 
-mod1b = lm(moral ~ Condition*Scenario, mm3)
+mod1b = lm(moral ~ Condition*Scenario, mm2b_clean)
 anova(mod1b)
 
-effectsize::cohens_d(mm3$moral, mm3$Condition)
+effectsize::cohens_d(mm2b_clean$moral, mm2b_clean$Condition)
 
 #to check with Ivar, why are some conditions NA?
-ggplot(mm3 %>% filter(!is.na(Condition)), aes(x = moral, group = Condition, color = Condition)) + 
+ggplot(mm2b_clean %>% filter(!is.na(Condition)), aes(x = moral, group = Condition, color = Condition)) + 
   geom_density()
 
-mm3 %>%
+mm2b_clean %>%
   select(moral1:moral3) %>%
   psych::alpha(., check.keys = TRUE)
-
-
 
 # Define column positions (make sure these are correct)
 effP = (1:22)*16 - 15
@@ -88,12 +88,12 @@ perP = (1:22)*16 - 1
 godP = (1:22)*16  
 
 # Verify column names in the dataset before selecting
-print(colnames(ge3raw))
+print(colnames(mm2b))
 
 # Create tdata3: Extract relevant columns & compute moral dimensions
-tdata3 = ge3raw %>%
-  select(Q167_1:Q730_4, PROLIFIC_PID) %>%
-  select(ends_with("_1"), PROLIFIC_PID) %>%
+mm2b_trials = mm2b %>%
+  select(Q167_1:Q730_4, PROLIFIC_PID, Condition) %>%
+  select(ends_with("_1"), PROLIFIC_PID, Condition) %>%
   mutate(
     effort = rowSums(.[effP], na.rm = TRUE),
     natural = rowSums(.[natP], na.rm = TRUE),
@@ -110,23 +110,37 @@ tdata3 = ge3raw %>%
     futurerisk = rowSums(.[futP], na.rm = TRUE),
     dehumanize = rowSums(.[dehP], na.rm = TRUE),
     changeperson = rowSums(.[perP], na.rm = TRUE), 
-    playgod = if ("playgod" %in% colnames(ge3raw)) rowSums(.[godP], na.rm = TRUE) else NA
+    playgod = rowSums(.[godP], na.rm = TRUE), 
   ) %>%
-  select(PROLIFIC_PID:playgod)
+  select(PROLIFIC_PID, Condition, effort:playgod)
 
-glimpse(tdata3)
+glimpse(mm2b_trials)
 
 # Merge processed moral dimensions with the main dataset
-mm3c = full_join(mm3, tdata3, by = 'PROLIFIC_PID') %>%
-  filter(!is.na(PROLIFIC_PID))  # Ensure valid participant IDs
+mm2b_clean = full_join(mm2b_clean %>%
+                         filter(!is.na(PROLIFIC_PID), !is.na(Condition)), 
+                       mm2b_trials %>%
+                         filter(!is.na(PROLIFIC_PID), !is.na(Condition)), 
+                       by =  c('PROLIFIC_PID', 'Condition')) %>%  # Ensure valid participant IDs
+  filter(!is.na(Scenario))
 
-glimpse(mm3c)
+glimpse(mm2b_clean)
 
 # Cross-tabulation of Scenario and Condition
-xtabs(~ Scenario + Condition, mm3c)
+xtabs(~ Scenario + Condition, mm2b_clean)
+
+xtabs(~ PROLIFIC_PID, mm2b_clean)
+
+mm2b_clean %>%
+  select(PROLIFIC_PID) %>%
+  group_by(PROLIFIC_PID) %>%
+  tally() %>%
+  filter(n > 1) %>%
+  left_join(., mm2b_clean, by = 'PROLIFIC_PID') %>%
+  View()
 
 # Apply comprehension checks to filter valid responses
-mm3c = mm3c %>%
+mm2b_clean = mm2b_clean %>%
   mutate(
     check2 = case_when(
       Scenario == 'Anxiety' & Comp2 == 18 ~ 'Keep', 
@@ -148,12 +162,12 @@ mm3c = mm3c %>%
   filter(check2 == 'Keep', check1 == 'Keep')
 
 # Verify that 'playgod' exists before selecting it
-if (!"playgod" %in% colnames(mm3c)) {
+if (!"playgod" %in% colnames(mm2b_clean)) {
   warning("Column 'playgod' not found in mm3c. It may not have been included in the dataset.")
 }
 
 # Create figure data
-fig1 = mm3c %>%
+fig1 = mm2b_clean %>%
   select(Condition, moral, starts_with("playgod")) %>%
   gather(-moral, -Condition, key = 'property', value = 'resp')
 
@@ -162,37 +176,185 @@ library(ggpubr)
 install.packages("lme4")  # Install if not already installed
 library(lme4)  # Load the package
 
-
-ggplot(fig1, aes(x = resp, y = moral))+
-  geom_jitter(alpha = .5, aes(color = Condition), size = .5, shape = 21) + geom_smooth(color = 'grey') +
-  stat_conf_ellipse(aes(color = Condition, fill = Condition), geom = 'polygon', alpha = .5)+
-  facet_wrap(~ property) + theme_minimal() + theme(legend.position = 'top')
-
-ggsave('figExp3.jpg', width = 8, height = 8, dpi = 400)
-
-mm3c %>%
-  group_by(Scenario, Condition) %>%
-
 mod2 = lmer(moral ~ effort + natural + useful + greatergood + 
               autonomy +  enhancement + irreversible + unfair + 
               cheating + external + normal + unsafe + futurerisk + 
               dehumanize + changeperson + playgod +
-              (1 | Scenario), mm3c)
-jtools::summ(mod2, digits = 3)
+              (1 | Scenario), mm2b_clean)
+jtools::summ(mod2, digits = 3, scale = TRUE, confint = TRUE, transform.response = TRUE)
+car::vif(mod2)
 
-mod2 = glmer(biotech ~ effort + natural + useful + greatergood + 
+
+mm2b_clean = mm2b_clean %>%
+  mutate(biotech = Condition == 'Biotechnological')
+
+mod3 = glm(biotech ~ effort + natural + useful + greatergood + 
               autonomy +  enhancement + irreversible + unfair + 
               cheating + external + normal + unsafe + futurerisk + 
-              dehumanize + changeperson + playgod +
-              (1 | Scenario), mm3c, family = 'binomial')
-jtools::summ(mod2, digits = 3)
+              dehumanize + changeperson + playgod, mm2b_clean, family = 'binomial')
+jtools::summ(mod3, digits = 3,  confint = TRUE)
+car::vif(mod3)
 
-mod2 = lmer(moral ~ effort + natural + useful + greatergood + 
-              autonomy +  enhancement + irreversible + unfair + 
-              cheating + external + normal + unsafe + futurerisk + 
-              dehumanize + changeperson + playgod +
-              (1 | Scenario), mm3c)
-jtools::summ(mod2, digits = 3)
+library(glmnet)
+
+# X = predictor matrix (standardized)
+# y = outcome vector (numeric or factor for classification)
+
+# if y is continuous (linear regression):
+family <- "gaussian"
+
+# if y is binary (logistic regression):
+# family <- "binomial"
+
+alphas <- seq(0, 1, by = 0.1)   # sweep alpha from 0 to 1
+results <- list()
+cv_errors <- numeric(length(alphas))
+
+set.seed(123)  # reproducibility
+
+X = mm2b_clean %>%
+  select(effort:playgod)
+
+y = mm2b_clean$moral
+
+for (i in seq_along(alphas)) {
+  cv_fit <- cv.glmnet(
+    x = as.matrix(X),
+    y = y,
+    alpha = alphas[i],     # mix between ridge (0) and lasso (1)
+    family = family,
+    nfolds = 10
+  )
+  
+  results[[i]] <- cv_fit
+  cv_errors[i] <- min(cv_fit$cvm)  # record CV error
+}
+
+# pick alpha with lowest CV error
+best_idx <- which.min(cv_errors)
+best_alpha <- alphas[best_idx]
+best_fit <- results[[best_idx]]
+
+cat("Best alpha:", best_alpha, "\n")
+cat("Best lambda:", best_fit$lambda.min, "\n")
+
+# extract coefficients at best alpha and lambda
+coef(best_fit, s = "lambda.min") %>%
+  round(3)
+
+y = mm2b_clean$biotech
+family <- "binomial"
+
+for (i in seq_along(alphas)) {
+  cv_fit <- cv.glmnet(
+    x = as.matrix(X),
+    y = y,
+    alpha = alphas[i],     # mix between ridge (0) and lasso (1)
+    family = family,
+    nfolds = 10
+  )
+  
+  results[[i]] <- cv_fit
+  cv_errors[i] <- min(cv_fit$cvm)  # record CV error
+}
+
+# pick alpha with lowest CV error
+best_idx2 <- which.min(cv_errors)
+best_alpha2 <- alphas[best_idx2]
+best_fit2 <- results[[best_idx2]]
+
+cat("Best alpha:", best_alpha2, "\n")
+cat("Best lambda:", best_fit2$lambda.min, "\n")
+
+# extract coefficients at best alpha and lambda
+coef(best_fit2, s = "lambda.min") %>%
+  round(3)
+
+
+full_join(
+coef(best_fit2, s = "lambda.min") %>% as.matrix() %>%
+  as.data.frame() %>%
+  mutate(predictor = rownames(.)),
+coef(best_fit, s = "lambda.min") %>% as.matrix() %>%
+  as.data.frame() %>%
+  mutate(predictor = rownames(.)),
+by = 'predictor') %>%
+  mutate(product = lambda.min.x * lambda.min.y) %>%
+  filter(predictor != "(Intercept)") %>%
+  ggplot(aes(x = reorder(predictor, -abs(product)), y = abs(product))) + 
+  geom_col(width = .1, color = 'black') +
+  geom_point(shape = 21, fill = 'white', stroke = 1, size = 2.5) + 
+  scale_y_continuous(limits = c(0, .0021), expand = c(0.0045, 0), 
+                     name = 'Product of coefficients') +
+  scale_x_discrete(name = 'Predictor') +
+  coord_flip() + 
+  theme_classic() + 
+  theme(axis.ticks.y = element_blank(),
+      axis.text = element_text(size = 11),
+      axis.title = element_text(size = 13),
+      legend.position = 'bottom',
+      plot.margin = margin(0.3,1,0.3, 1, "cm"),
+      legend.title = element_text(size = 10))
+
+full_join(
+  coef(best_fit2, s = "lambda.min") %>% as.matrix() %>%
+    as.data.frame() %>%
+    mutate(predictor = rownames(.)),
+  coef(best_fit, s = "lambda.min") %>% as.matrix() %>%
+    as.data.frame() %>%
+    mutate(predictor = rownames(.)),
+  by = 'predictor') %>%
+  mutate(product = lambda.min.x * lambda.min.y) %>%
+  filter(predictor != "(Intercept)") %>%
+  ggplot(aes(x = abs(lambda.min.x), y = abs(lambda.min.y))) + 
+  geom_point(shape = 21, size = .5) +
+  ggrepel::geom_text_repel(aes(label = predictor)) + 
+  scale_y_continuous(name = 'Absolute coefficient of moral judgment model', 
+                     limits = c(0, .3)) +
+  scale_x_continuous(name = 'Absolute coefficient of condition model',
+                     limits = c(0, .04)) +
+  theme_classic() + 
+  theme(axis.ticks.y = element_blank(),
+        text = element_text(size = 11),
+        axis.text = element_text(size = 11),
+        axis.title = element_text(size = 11),
+        legend.position = 'bottom',
+        plot.margin = margin(0.3,1,0.3, 1, "cm"),
+        legend.title = element_text(size = 10))
+
+ggsave('Figures/Figure4a.jpg', dpi = 300, width = 15, height = 15, units = 'cm')
+
+install.packages('glmmPen')
+library(glmmPen)
+
+# Fit a penalized GLMM
+model <- glmmPen(
+  formula = moral ~ effort + natural + useful + greatergood + 
+    autonomy +  enhancement + irreversible + unfair + 
+    cheating + external + normal + unsafe + futurerisk + 
+    dehumanize + changeperson + playgod +
+    (1 | Scenario),
+  data = mm2b_clean,
+  family = "gaussian",  # or "binomial", "poisson"
+  penalty = "lasso",   # or "SCAD", "MCP"
+  alpha = 1,           # 1 for LASSO, 0 for ridge
+)
+
+
+
+full_join(jtools::summ(mod3, digits = 3,  confint = TRUE)$coeftable %>%
+  data.frame() %>% rename(coef_b = `Est.`) %>%
+  mutate(predictor = row.names(.)), 
+jtools::summ(mod2, digits = 3,  confint = TRUE)$coeftable %>%
+  data.frame() %>% rename(coef_a = `Est.`) %>%
+  mutate(predictor = row.names(.)), 
+by = 'predictor') %>%
+  mutate(product = round(`z.val.` * `t.val.`, 2), 
+         product_coef = round(coef_a * coef_b, 6)*100) %>%
+  select(predictor, product, product_coef) %>%
+  filter(predictor != '(Intercept)') %>%
+  ggplot(aes(x = abs(product), y = abs(product_coef), label = predictor)) + 
+  geom_point() + geom_label()
 
 mod2 = glmer(biotech ~ effort * external * normal + 
                (1 | Scenario), mm3c, family = 'binomial')
@@ -228,14 +390,14 @@ car::Anova(mod2)
 
 jtools::summ(mod2, digits = 3, scale = TRUE)
 
-mm3 = mm3 %>%
+mm2b_clean = mm2b_clean %>%
   mutate(biotech = Condition == 'Biotechnological')
 
 mod3 = glmer(biotech ~ effort + natural + useful + greatergood + 
               autonomy +  enhancement + irreversible + unfair + 
               cheating + external + normal + unsafe + futurerisk + 
               dehumanize + changeperson + playgod +
-              (1 | Scenario), mm3, family = 'binomial')
+              (1 | Scenario), mm2b_clean, family = 'binomial')
 jtools::summ(mod3, digits = 3)
 
 glimpse(mm3)
@@ -272,7 +434,7 @@ byscen2 = numScen %>%
     )
   )
 
-byscen3 = mm3c %>%
+byscen3 = mm2b_clean %>%
   group_by(Condition, Scenario) %>%
   summarise_at(vars(moral:playgod), mean, na.rm = TRUE)
 
@@ -300,10 +462,10 @@ ggplot(mm3, aes(x = sqrt(effort) - sqrt(useful), y = cheating)) +
 ggplot(mm3byscen, aes(x = attitude, y = moral, label = Scenario)) + 
   geom_point()+geom_smooth()+geom_label_repel()
 
-figmm3 = mm3byscen %>%
+figmm3 = byscen3 %>%
   gather(effort:playgod, key = 'item', value = 'resp')
 
-mm3means = mm3 %>%
+mm3means = byscen3 %>%
   gather(effort:playgod, key = 'item', value = 'resp') %>%
   group_by(item, Condition) %>%
   summarise(resp = mean(resp, na.rm = TRUE), 
@@ -314,8 +476,8 @@ levels(mm3means$Condition) = c('Technological', 'Conventional')
 
 mmDistance = mm3means %>%
   pivot_wider(names_from = 'Condition', values_from = c('resp', 'moral')) %>%
-  mutate(xDiff = resp_Conventional - resp_Technological, 
-         yDiff = moral_Conventional - moral_Technological, 
+  mutate(xDiff = resp_Conventional - resp_Biotechnological, 
+         yDiff = moral_Conventional - moral_Biotechnological, 
          diagDiff = sqrt(abs(xDiff * yDiff))) %>%
   select(item, diagDiff)
 
@@ -340,7 +502,7 @@ levels(mm3means$itemLong) = c(
 
 
 figmm3$Condition = as.factor(figmm3$Condition)
-levels(figmm3$Condition) = c('Technological', 'Conventional')
+levels(figmm3$Condition) = c('Biotechnological', 'Conventional')
 
 figmm3$itemLong = as.factor(figmm3$item)
 levels(figmm3$itemLong) = c(
@@ -349,7 +511,7 @@ levels(figmm3$itemLong) = c(
   'X cheated, or took the easy way out, to ACHIEVE-Y.',
   'ACT made X less human.',
   'To ACHIEVE-Y, X had to put in effort and hard work.',
-  'X´s actions were more like (0) treatment or (100) enhancement.', 
+  'X´s actions were more like: (0) treatment or (100) enhancement.', 
   'X ACHIEVED-Y by (0 = intervening on their insides; 100 = modifying environment).',
   'X´s actions will have (0 = good, 100 = bad) long-term consequences.',
   'X´s actions were (0 = bad, 100 = good) for society.',
@@ -371,7 +533,8 @@ figmm3 = arrange(figmm3, desc(abs(diagDiff)))
 
 ggplot(arrange(figmm3, desc(abs(diagDiff))), aes(x = resp, y = moral)) + 
   geom_smooth(fill = 'grey', method = 'lm', formula = y ~ x + x^2, 
-              alpha = .4, color = NA)+
+              alpha = .4, color = NA) +
+  facet_wrap(~ itemLong, labeller = labeller(itemLong = label_wrap_gen(40)))
   geom_point(aes(color = Condition), alpha = .5, shape = 4, size = .8) +
   geom_line(data = mm3means, aes(x = resp, y = moral, group = itemLong), linetype = 1, 
             color = 'black', linewidth = 1.2) +
@@ -390,33 +553,55 @@ ggplot(arrange(figmm3, desc(abs(diagDiff))), aes(x = resp, y = moral)) +
         plot.margin = margin(0.3,1,0.3, 1, "cm")) + 
   coord_fixed(ratio = 1, ylim = c(0, 100), xlim = c(0, 100))
 
-ggsave('figExp4.jpg', width = 12, height = 12, dpi = 400)
+
 
 modItem = lmer(attitude ~ resp*item + Condition + (1 | Scenario), figmm3)
 anova(modItem)
 
+library(ggplot2)
+library(ggtext)           # for element_markdown()
+
+# 1) wrap itemLong to 40 characters (this inserts \n)
+figmm3$wrapped_itemLong <- ggplot2::label_wrap_gen(40)(figmm3$itemLong)
+mm3means$wrapped_itemLong <- ggplot2::label_wrap_gen(40)(mm3means$itemLong)
+
+# 2) convert those line breaks to HTML <br/> so they display inside <i>...</i>
+figmm3$wrapped_itemLong_html <- gsub("\n", "<br/>", figmm3$wrapped_itemLong)
+mm3means$wrapped_itemLong_html <- gsub("\n", "<br/>", mm3means$wrapped_itemLong)
+
+# 3) create the HTML label: bold item, line break, italic itemLong
+figmm3$facet_label_html <- paste0("<span style='font-size:12px;'><b>", figmm3$item, "</b></span><br/><i>", figmm3$wrapped_itemLong_html, "</i>")
+mm3means$facet_label_html <- paste0("<span style='font-size:12px;'><b>", mm3means$item, "</b></span><br/><i>", mm3means$wrapped_itemLong_html, "</i>")
+
+# 4) reorder the HTML labels by -abs(diagDiff)
+#    reorder() will preserve the label strings (including the HTML)
+figmm3$facet_label_html <- with(figmm3, reorder(facet_label_html, -abs(diagDiff)))
+mm3means$facet_label_html <- with(mm3means, reorder(facet_label_html, -abs(diagDiff)))
+
+
 ggplot(figmm3, aes(x = resp, y = moral)) + 
   geom_smooth(fill = 'grey', method = 'lm', formula = y ~ x + x^2, 
               alpha = .4, color = NA)+
-  geom_point(aes(color = Condition), alpha = .5, shape = 4, size = .8) +
-  geom_line(data = mm3means, aes(x = resp, y = moral, group = reorder(item, abs(diagDiff))), linetype = 1, 
-            color = 'black', linewidth = 1.2) +
+  geom_point(aes(color = Condition), alpha = .5, shape = 21, size = .8) +
+  geom_line(data = mm3means, aes(x = resp, y = moral, group = facet_label_html), linetype = 1, 
+            color = 'black', linewidth = 1) +
   geom_point(data = mm3means, aes(x = resp, y = moral, color = Condition),
-             size = 3, shape = 21, alpha = .8, fill = 'white', stroke = 1.5) +
-  facet_wrap(~ reorder(item, -abs(diagDiff))) + 
+             size = 3, shape = 21, fill = 'white', stroke = 1.5) +
+  facet_wrap(~ facet_label_html) + 
   theme_minimal() + theme(legend.position = 'top') + 
   scale_color_brewer(palette = 'Dark2') + 
   scale_fill_brewer(palette = 'Dark2') + 
-  scale_x_continuous(name = NULL, 
+  scale_x_continuous(name = "Predictor", expand = c(0, 0),limits = c(0, 100),
                      breaks = c(0, 50, 100)) +
-  scale_y_continuous(name = 'Moral judgment', 
+  scale_y_continuous(name = 'Moral judgment', expand = c(0, 0), limits = c(0, 100),
                      breaks = c(0, 50, 100)) + 
-  theme(legend.position = 'top', panel.grid.minor = element_blank(),
-        legend.title = element_blank(), strip.text = element_text(size = 10),
+  theme(legend.position = 'bottom', panel.grid.minor = element_blank(),
+        legend.title = element_blank(), strip.text = element_markdown(size = 6),
+        panel.spacing.x = grid::unit(1, "lines"),
         plot.margin = margin(0.3,1,0.3, 1, "cm")) + 
   coord_fixed(ratio = 1, ylim = c(0, 100), xlim = c(0, 100))
 
-ggsave('figExp4.jpg', width = 9, height = 9, dpi = 400)
+ggsave('Figure2b_exp.jpg', width = 22, height = 25, dpi = 400, units = 'cm')
 
 emtrends(modItem, pairwise ~ item, var = 'resp', adjust = 'none')
 
