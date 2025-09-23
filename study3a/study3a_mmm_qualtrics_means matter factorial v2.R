@@ -1,7 +1,7 @@
 library(tidyverse)
 library(readxl)
 
-filename = "means+matter+factorial+v2_May+26,+2023_10.21.csv"
+filename = "study3a/study3a.csv"
 headers = read_csv(filename, col_names = FALSE, n_max = 1)
 p5 = read_csv(filename, skip = 3, col_names = FALSE)
 colnames(p5)= headers
@@ -19,6 +19,17 @@ mj = p5 %>%
 
 mj$scenario = as.factor(mj$scenario)
 levels(mj$scenario)
+
+cheat = p5 %>%
+  select(contains('_FAIR'), contains('_CHEAT'), PROLIFIC_PID) %>%
+  gather(-PROLIFIC_PID, key = 'key', value = 'resp', na.rm = TRUE) %>%
+  mutate(scenario = str_sub(key, 1, 3), 
+         item = str_sub(key, 5, 8)) %>%
+  filter(!is.na(PROLIFIC_PID)) %>%
+  pivot_wider(names_from = 'item', values_from = 'resp', id_cols = c('PROLIFIC_PID', 'scenario')) %>% 
+  mutate(fair = if_else(is.na(FAIR), `_FAI`, FAIR),
+         cheat = if_else(is.na(CHEA), `_CHE`, CHEA)) %>%
+  select(PROLIFIC_PID, scenario, fair, cheat)
 
 glimpse(mj)
 
@@ -42,13 +53,17 @@ levels(mc$scenario)
 
 dtP5 = full_join(mj, mc, by = c('PROLIFIC_PID', 'scenario'))
 
+
+dtP5b = full_join(dtP5, cheat, by = c('PROLIFIC_PID', 'scenario'))
+
 ivFactors = p5 %>%
   select(matches("Internal|Effort|Reward|Normality", ignore.case = FALSE), PROLIFIC_PID) %>%
   gather(-PROLIFIC_PID, key = 'key', value = 'factorName', na.rm = TRUE) %>%
   mutate(scenario = str_to_upper(str_sub(key, 1, 3)), 
          item = str_sub(key, 4, -1)) %>%
   filter(!is.na(PROLIFIC_PID), PROLIFIC_PID != '64441db380a4f44c2bfec904') %>%
-  pivot_wider(names_from = 'item', values_from = 'factorName', id_cols = c('PROLIFIC_PID', 'scenario'))  
+  pivot_wider(names_from = 'item', values_from = 'factorName', id_cols = c('PROLIFIC_PID', 'scenario')) %>%
+  unnest()
 
 glimpse(ivFactors)
 
@@ -79,6 +94,9 @@ sumdt5 = dtP5 %>%
             reward = mean(reward, na.rm = TRUE),
             normal = mean(normality, na.rm = TRUE),
             internal = mean(body, na.rm = TRUE))
+
+
+
 
 ggplot(sumdt5, aes(x = (effort - reward), y = moral, color = Internal)) + 
   geom_point(aes(color = Internal)) + geom_smooth(method = 'lm')
@@ -123,6 +141,25 @@ cor.test(~ effort + moral, subset(sumdt5, Reward == 'Low'))
 cor.test(~ effort + moral, subset(sumdt5, Reward == 'High'))
 
 
+mod1 = lmer(scale(body) ~ Internal + (1 | scenario), dtP5)
+emmeans(mod1, pairwise ~ Internal)
+jtools::summ(mod1, digits = 3)
+
+mod1 = lmer(scale(normality) ~ Normality + (1 | scenario), dtP5)
+emmeans(mod1, pairwise ~ Normality)
+jtools::summ(mod1, digits = 3)
+
+mod1 = lmer(scale(effort) ~ Effort + (1 | scenario), dtP5)
+emmeans(mod1, pairwise ~ Effort)
+jtools::summ(mod1, digits = 3)
+
+mod1 = lmer(scale(reward) ~ Reward + (1 | scenario), dtP5)
+emmeans(mod1, pairwise ~ Reward)
+
+mod1 = lmer(body ~ Internal + (1 | scenario), dtP5)
+emmeans(mod1, pairwise ~ Internal)
+
+
 t.test(body ~ Internal, dtP5)
 effectsize::cohens_d(dtP5$body ~ dtP5$Internal)
 
@@ -161,7 +198,69 @@ cor.test(~ resp + reward, dtP5)
 
 mod1 = lmer(resp ~ Internal * Normality * Effort * Reward + (1 | scenario), dtP5)
 car::Anova(mod1, test.statistic = 'F')
-jtools::summ(mod1, digits = 3, confint = TRUE, scale = TRUE)
+
+
+mod1add = lmer(scale(resp) ~ Internal + Normality + Effort + Reward + (1 | scenario), dtP5)
+
+grand_effs = jtools::summ(mod1add, confint = TRUE)$coeftable %>%
+  data.frame() %>%
+  rename(estimate = Est., low_ci = X2.5., hi_ci = X97.5.) %>%
+  mutate(effect = c(NA, 'Internal', 'Normality', 'Effort', 'Reward')) %>%
+  filter(!is.na(effect))
+
+mod1b = lm(scale(resp) ~ Internal * Normality * Effort * Reward * scenario, dtP5)
+
+temp = 
+  bind_rows(
+    emmeans(mod1b, pairwise ~ Internal | Normality * Effort * Reward * scenario)$contrasts %>%
+      data.frame() %>% mutate(effect = 'Internal'),
+    emmeans(mod1b, pairwise ~ Normality | Internal * Effort * Reward* scenario)$contrasts %>%
+      data.frame() %>% mutate(effect = 'Normality'),
+    emmeans(mod1b, pairwise ~ Effort | Normality * Internal * Reward* scenario)$contrasts %>%
+      data.frame() %>% mutate(effect = 'Effort'),
+    emmeans(mod1b, pairwise ~ Reward | Normality * Effort * Internal* scenario)$contrasts %>%
+      data.frame() %>% mutate(effect = 'Reward'))
+
+ggplot(temp, aes(x = reorder(effect, estimate), y = estimate)) + 
+  geom_violin(trim = FALSE, draw_quantiles = c(.25, .75), fill = 'skyblue',
+              ) + 
+  geom_hline(yintercept = 0, linetype = 2) +
+  geom_jitter(width = .05, size = .7, alpha = .6, shape = 21, fill = 'white') + 
+  geom_linerange(data = grand_effs, aes(ymin = -hi_ci, ymax = -low_ci)) +
+  geom_point(data = grand_effs, aes(y = -estimate), 
+             fill = 'white', shape = 21, size = 3) +
+  coord_flip() + 
+  theme_classic() + 
+  scale_y_continuous(name = 'Semi-standardized\nregression coefficients', breaks = seq(-1, 2, 1), 
+                     limits = c(-1.1, 2)) + 
+  scale_x_discrete(name = NULL) + 
+  theme(legend.position = 'top',
+        axis.text = element_text(size= 12),
+        text = element_text(size= 12),
+        legend.title = element_blank(),
+        axis.ticks = element_blank())
+
+ggsave('Figures/Figure5.jpg', dpi = 300, width = 12, height = 8, units = 'cm')
+
+
+mod1 = lmer(scale(cheat) ~ Internal * Normality * Effort * Reward + (1 | scenario), dtP5b)
+car::Anova(mod1, test.statistic = 'F')
+emmeans(mod1, pairwise ~ Internal)
+emmeans(mod1, pairwise ~ Normality)
+
+mod1 = lmer(scale(fair) ~ Internal * Normality * Effort * Reward + (1 | scenario), dtP5b)
+car::Anova(mod1, test.statistic = 'F')
+emmeans(mod1, pairwise ~ Internal)
+emmeans(mod1, pairwise ~ Effort)
+
+glimpse(dtP5)
+
+emmeans(mod1, pairwise ~ Internal)
+emmeans(mod1, pairwise ~ Normality)
+emmeans(mod1, pairwise ~ Effort)
+emmeans(mod1, pairwise ~ Reward | Effort)
+
+jtools::summ(mod1, digits = 3, confint = TRUE)
 
 mod1i = lmer(resp ~ Normality * Effort * Reward + (1 | scenario), subset(dtP5, !is.na(Reward)))
 anova(mod1, mod1i)
@@ -177,12 +276,12 @@ emmeans(mod1, pairwise ~ Normality)
 emmeans(mod1, pairwise ~ Effort)
 emmeans(mod1, pairwise ~ Reward)
 emmeans(mod1, pairwise ~ Reward | Effort)
-emmeans(mod1, pairwise ~ Reward | Normality)
+emmeans(mod1, pairwise ~ Effort * Reward | Normality)
 emmeans(mod1, pairwise ~ Effort | Normality)
 
-mod2 = lmer(resp ~ body * normality * effort * reward + (1 | scenario), dtP5)
+mod2 = lmer(resp ~ body + normality + effort + reward + (1 | scenario), dtP5)
 car::Anova(mod2, test.statistic = 'F')
-jtools::summ(mod2, digits = 3, confint = TRUE, scale = TRUE)
+jtools::summ(mod2, digits = 3, confint = TRUE, scale = TRUE, transform.response = TRUE)
 
 t.test(reward ~ Reward, dtP5)
 effectsize::cohens_d(dtP5$reward ~ dtP5$Reward)
