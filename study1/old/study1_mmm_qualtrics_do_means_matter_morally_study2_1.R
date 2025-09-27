@@ -3,7 +3,7 @@ library(tidyverse)
 #Cleaning data
 
 #This is "Do means matter morally Study 2"
-filename = "mmm_studyA.csv"
+filename = "study1/study1.csv"
 headers = read_csv(filename, col_names = FALSE, n_max = 1)
 ge2raw = read_csv(filename, skip = 3, col_names = FALSE)
 colnames(ge2raw)= headers
