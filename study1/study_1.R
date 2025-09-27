@@ -63,7 +63,8 @@ mm1resp = mm1raw %>%
     impscore = rowMeans(select(., AIscale_10:AIscale_18), na.rm = TRUE),
     ibscore  = rowMeans(select(., OUS_1:OUS_5), na.rm = TRUE) - 25,
     ihscore  = rowMeans(select(., OUS_6:OUS_9), na.rm = TRUE) - 25
-  )
+  ) %>% 
+  select(-safe_1, -conseq_1)
 
 
 
@@ -249,9 +250,7 @@ anova(mod3)
 
 emmeans(mod3, pairwise ~ Methods)
 
-
 #Supplementary Figure 1
-
 
 mm1 %>% group_by(Methods) %>% summarise(min(futureharm, na.rm = TRUE),
                                         max(futureharm, na.rm = TRUE))
@@ -277,31 +276,100 @@ ggplot(mm1, aes(x = futureharm, y = response, color = Methods)) +
 ggsave('Figures/Sup_Figure1.jpg', dpi = 300, width = 16, height = 12, units = 'cm')
 
 
-# Supplementary Analysis 2. Oxford Utilitarianism Scale.
+# Supplementary Analysis 2. Does endorsing impartial beneficence and instrumental harm predict 
+# preferences for conventional and technological enhancements? 
+
+mod4 = lm(response ~ (ibscore + ihscore)*Methods, mm1)
+anova(mod4)
+emtrends(mod4, pairwise ~ Methods, var = 'ibscore')
+emtrends(mod4, pairwise ~ Methods, var = 'ihscore')
+
+#Supplementary Figure 2
+
+ggplot(mm1, aes(x = ihscore, y = response, color = Methods)) +
+  geom_jitter(width = 0.2, height = 0, alpha = 0.7) +  
+  geom_smooth(method = "lm", se = TRUE) + 
+  theme_classic() +
+  ylim(0, 100) +
+  scale_color_brewer(palette = "Set2") +
+  labs(
+    x = "Instrumental Harm (IH score)",
+    y = "Moral Judgment",
+    color = "Methods"
+  ) +
+  theme(
+    legend.position = c(0.15, 0.15)
+  )
+
+ggsave('Figures/Sup_Figure2.jpg', dpi = 300, width = 16, height = 12, units = 'cm')
+
+
+# Supplementary Analysis 3. Act-Impact
+
+xtabs(~ ActImp, mm1)
+xtabs(~ ActImp + Endorsement, mm1)
+
+t.test(ibscore ~ ActImp, mm1)
+t.test(ihscore ~ ActImp, mm1)
+
+
+
+
+# Supplementary Analysis 4. Mega
+
+alpha(mm1[, c("Religiosity", "Social", "Fiscal")])
+mm1$pol = (mm1$Religiosity + mm1$Social + mm1$Fiscal)/3
+
+
+
+
+emtrends(mod4, pairwise ~ Methods, var = 'impscore')
+
+
+mod3 = lm(resp ~ Religiosity+Social+(actscore + impscore)+(ihscore + ibscore), ge2, 
+          subset = Methods == 'Technological')
+jtools::summ(mod3, digits = 3, confint = TRUE)
+anova(mod3)
+
+mod3 = lm(resp ~ (actscore + impscore)*Methods, ge2)
+
+interactions::interact_plot(mod3, pred = 'actscore', modx = 'Methods', interval = TRUE, 
+                            plot.points = TRUE)
+
+mod3 = lm(resp ~ (actrate + imprate)*Methods, ge2)
+anova(mod3)
+
+glimpse(ge2)
+
+
+mod2 = lm(response ~ ActImp*Methods*Vignettes, mm1)
+anova(mod2)
+
+glimpse(mm1)
+
+ge2 %>%
+  select(AIscale_1:AIscale_18) %>%
+  stats::factanal(., factor = 2)
+
+t.test(actscore ~ ActImp, ge2)
+t.test(impscore ~ ActImp, ge2)
+
+
+effectsize::cohens_d(response ~ Methods, data = mm1)
+
+mod4 = lm(response ~ (actscore + impscore)*Methods, mm1)
+anova(mod4)
 
 
 # common support
-mod5 = lm(response ~ Methods*(actscore), mm1, subset = futureharm > -3.1 & futureharm < 32.4)
+mod5 = lm(resp ~ Methods*(actscore), ge2, subset = futureharm > -3.1 & futureharm < 32.4)
 anova(mod5)
 
-ggplot(mm1, aes(x = futureharm, y = response, 
-                color = Methods))+
-  geom_vline(xintercept = -3.11, linetype = 2)+
-  geom_vline(xintercept = 32.4, linetype = 2)+
-  geom_jitter()+geom_smooth(method = 'lm')+
-  theme_minimal()+ylim(0,100)+
-  scale_color_brewer(palette = 'Set2')
 
 
-ggplot(subset(mm1, impscore > 2), aes(x = actscore, y = response, color = Methods))+
+ggplot(subset(ge2, impscore > 2), aes(x = actscore, y = resp, color = Methods))+
   geom_jitter()+geom_smooth(method = 'lm')+
   theme_minimal()+ylim(0,100)+
   scale_color_brewer(palette = 'Set2')
 
 names(ge2)
-
-
-
-
-
-
