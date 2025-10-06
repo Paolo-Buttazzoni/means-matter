@@ -3,11 +3,9 @@ library(tidyverse)
 library(emmeans)
 library(effectsize)
 library(psych)
-
-
-#'Do means matter morally?' Study 1
-
-# --- Load and Clean Data ---
+library(interactions)
+library(ggrepel)
+# 'Do means matter morally?' Study 1 ####
 
 # Load dataset
 filename = "study1/study1_anon.csv"
@@ -33,7 +31,7 @@ mm1demog = mm1raw %>%
     Order = if_else(str_sub(FL_21_DO, 1, 5) == 'ABSTR', 'Abstract1st', 'Scenarios1st'))  %>%
   select(ResponseId, Order, Methods, Age, Gender, Endorsement, endorsement_num, Bipolar, Conservatism, Social, Fiscal, Religiosity)
 
-# --- Compare Conventional vs Technological DV (4 pairs) ---
+# Compare Conventional vs Technological DV (4 pairs) ####
 mm1resp = mm1raw %>%
   select(., contains(c("C1","C2","C3","C4","T1","T2","T3","T4")),
          ResponseId, safe_1, conseq_1, AIchoice,
@@ -71,7 +69,7 @@ mm1resp = mm1raw %>%
 mm1 = full_join(mm1demog, mm1resp) %>%
   filter(!is.na(Methods))
 
-# --- Demographics ---
+# Demographics ####
 
 # Mean & SD for Age
 mm1demog %>%
@@ -105,7 +103,7 @@ mm1demog %>%
 
 
 
-# t-test and Cohen d: Are Conventional vs Technological interventions the same?
+# t-test and Cohen d: Are Conventional vs Technological interventions the same? ####
 mm1 %>%
   group_by(Methods) %>%
   summarise(
@@ -116,7 +114,7 @@ t.test(response ~ Methods, mm1)
 effectsize::cohens_d(response ~ Methods, data = mm1)
 
 
-# t-test and Cohen d: Are each Conventional vs Technological intervention the same?
+# t-test and Cohen d: Are each Conventional vs Technological intervention the same? ####
 mm1scen = mm1raw %>%
   select(., contains(c("C1","C2", "C3", "C4", "T1", "T2", "T3", "T4")), ResponseId) %>%
   gather(-ResponseId, key = 'key', value = 'resp', na.rm = TRUE) %>%
@@ -134,7 +132,7 @@ for (i in levels(as.factor(mm1scen$scen))) {
 }
 
 
-# Are Difference and Equivalence endorsed equally?
+# Are Difference and Equivalence endorsed equally? ####
 mm1 %>%
   count(Endorsement) %>%
   mutate(prop = n / sum(n))
@@ -149,7 +147,7 @@ prop.test(xtabs(~ Endorsement, mm1), p = .5)
 t.test(mm1$Bipolar, mu = 50)
 
 
-# Does abstract endorsement predict people's preferences?
+# Does abstract endorsement predict people's preferences? 
 mod1 = lm(response ~ Endorsement*Methods, mm1) 
 anova(mod1)
 
@@ -161,7 +159,7 @@ anova(mod2)
 slopes <- emtrends(mod2, ~ Methods, var = "Bipolar")
 summary(slopes, infer = TRUE)
 
-#Figure 1
+##Figure 1 ####
 
 fig1a = ggplot(mm1, aes(x = response, group = Methods, color = Methods))+
   geom_histogram(alpha = .5, aes(y = ..density..), fill = 'transparent') + 
@@ -224,7 +222,7 @@ ggarrange(fig1a, ggarrange(fig1b, fig1c, nrow = 2, heights = c(1, 2),
 ggsave('Figures/Figure1.jpg', dpi = 300, width = 16, height = 12, units = 'cm')
 
 
-# Supplementary Analysis 1. Do perceptions of safety predict a preference for conventional enhancement?
+# Supplementary Analysis 1. Do perceptions of safety predict a preference for conventional enhancement? ####
 
 # Compute group stats
 mm1 %>%
@@ -250,7 +248,7 @@ anova(mod3)
 
 emmeans(mod3, pairwise ~ Methods)
 
-#Supplementary Figure 1
+### Supplementary Figure 1 ####
 
 mm1 %>% group_by(Methods) %>% summarise(min(futureharm, na.rm = TRUE),
                                         max(futureharm, na.rm = TRUE))
@@ -276,16 +274,20 @@ ggplot(mm1, aes(x = futureharm, y = response, color = Methods)) +
 ggsave('Figures/Sup_Figure1.jpg', dpi = 300, width = 16, height = 12, units = 'cm')
 
 
-# Supplementary Analysis 2. Does endorsing impartial beneficence and instrumental harm predict 
-# preferences for conventional and technological enhancements? 
+# Supplementary Analysis 2. Does endorsing impartial beneficence and instrumental harm predict ####
 
+# preferences for conventional and technological enhancements? 
 mod4 = lm(response ~ (ibscore + ihscore)*Methods, mm1)
 anova(mod4)
 emtrends(mod4, pairwise ~ Methods, var = 'ibscore')
 emtrends(mod4, pairwise ~ Methods, var = 'ihscore')
 
-#Supplementary Figure 2
+# Correlation with political orientation
+cor.test(~ Conservatism + actscore, mm1)
+cor.test(~ Conservatism + impscore, mm1)
 
+
+### Supplementary Figure 2 ####
 ggplot(mm1, aes(x = ihscore, y = response, color = Methods)) +
   geom_jitter(width = 0.2, height = 0, alpha = 0.7) +  
   geom_smooth(method = "lm", se = TRUE) + 
@@ -304,72 +306,94 @@ ggplot(mm1, aes(x = ihscore, y = response, color = Methods)) +
 ggsave('Figures/Sup_Figure2.jpg', dpi = 300, width = 16, height = 12, units = 'cm')
 
 
-# Supplementary Analysis 3. Act-Impact
+# Supplementary Analysis 3. Act-Impact ####
 
-xtabs(~ ActImp, mm1)
-xtabs(~ ActImp + Endorsement, mm1)
+# Check basic relationships
+t.test(actscore ~ ActImp, mm1)
+t.test(impscore ~ ActImp, mm1)
 
-t.test(ibscore ~ ActImp, mm1)
-t.test(ihscore ~ ActImp, mm1)
+# Factor analysis to validate the two-factor structure
+mm1 %>%
+  select(AIscale_1:AIscale_18) %>%
+  stats::factanal(factors = 2, rotation = "varimax")
+
+# Main effects and interactions with Methods
+mod5 <- lm(response ~ (actscore + impscore)*Methods, data = mm1)
+anova(mod5)
+summary(mod5)
+
+### Supplementary Figure 3 ####
+ggplot(mm1, aes(x = actscore, y = response, color = Methods)) +
+  geom_jitter(width = 0.2, height = 0, alpha = 0.7) +  
+  geom_smooth(method = "lm", se = TRUE) + 
+  theme_classic() +
+  ylim(0, 100) +
+  scale_color_brewer(palette = "Set2") +
+  labs(
+    x = "Action Score",
+    y = "Moral Judgment",
+    color = "Methods"  ) +
+  theme(
+    legend.position = c(0.15, 0.15))
+
+ggsave('Figures/Sup_Figure3.jpg', dpi = 300, width = 16, height = 12, units = 'cm')
 
 
+# Supplementary Analysis 4. Mega-analysis of demographic correlates ####
 
-
-# Supplementary Analysis 4. Mega
 
 alpha(mm1[, c("Religiosity", "Social", "Fiscal")])
 mm1$pol = (mm1$Religiosity + mm1$Social + mm1$Fiscal)/3
 
 
+#Non significant demographic tests to determine endorsement
+xtabs(~ Endorsement, mm1)
 
+age_endorsement <- mm1 %>%
+  group_by(Endorsement) %>%
+  summarise(
+    n = n(),
+    mean_age = mean(Age, na.rm = TRUE),
+    sd_age = sd(Age, na.rm = TRUE)
+  )
+print(age_endorsement)
+t.test(Age ~ Endorsement, mm1)
+effectsize::cohens_d(Age ~ Endorsement, data = mm1)
 
-emtrends(mod4, pairwise ~ Methods, var = 'impscore')
+cont_table <- xtabs(~ Gender + Endorsement, mm1)
+print(cont_table)
+fisher.test(xtabs(~ Gender + Endorsement, mm1))
 
+fiscal_endorsement <- mm1 %>%
+  group_by(Endorsement) %>%
+  summarise(
+    n = n(),
+    mean_age = mean(Fiscal, na.rm = TRUE),
+    sd_age = sd(Fiscal, na.rm = TRUE)
+  )
+print(fiscal_endorsement)
+t.test(Fiscal ~ Endorsement, mm1)
+effectsize::cohens_d(Fiscal ~ Endorsement, data = mm1)
 
-mod3 = lm(resp ~ Religiosity+Social+(actscore + impscore)+(ihscore + ibscore), ge2, 
-          subset = Methods == 'Technological')
-jtools::summ(mod3, digits = 3, confint = TRUE)
-anova(mod3)
+social_endorsement <- mm1 %>%
+  group_by(Endorsement) %>%
+  summarise(
+    n = n(),
+    mean_age = mean(Social, na.rm = TRUE),
+    sd_age = sd(Social, na.rm = TRUE)
+  )
+print(social_endorsement)
+t.test(Social ~ Endorsement, mm1)
+effectsize::cohens_d(Social ~ Endorsement, data = mm1)
 
-mod3 = lm(resp ~ (actscore + impscore)*Methods, ge2)
+religion_endorsement <- mm1 %>%
+  group_by(Endorsement) %>%
+  summarise(
+    n = n(),
+    mean_age = mean(Religiosity, na.rm = TRUE),
+    sd_age = sd(Religiosity, na.rm = TRUE)
+  )
+print(religion_endorsement)
+t.test(Religiosity ~ Endorsement, mm1)
+effectsize::cohens_d(Religiosity ~ Endorsement, data = mm1)
 
-interactions::interact_plot(mod3, pred = 'actscore', modx = 'Methods', interval = TRUE, 
-                            plot.points = TRUE)
-
-mod3 = lm(resp ~ (actrate + imprate)*Methods, ge2)
-anova(mod3)
-
-glimpse(ge2)
-
-
-mod2 = lm(response ~ ActImp*Methods*Vignettes, mm1)
-anova(mod2)
-
-glimpse(mm1)
-
-ge2 %>%
-  select(AIscale_1:AIscale_18) %>%
-  stats::factanal(., factor = 2)
-
-t.test(actscore ~ ActImp, ge2)
-t.test(impscore ~ ActImp, ge2)
-
-
-effectsize::cohens_d(response ~ Methods, data = mm1)
-
-mod4 = lm(response ~ (actscore + impscore)*Methods, mm1)
-anova(mod4)
-
-
-# common support
-mod5 = lm(resp ~ Methods*(actscore), ge2, subset = futureharm > -3.1 & futureharm < 32.4)
-anova(mod5)
-
-
-
-ggplot(subset(ge2, impscore > 2), aes(x = actscore, y = resp, color = Methods))+
-  geom_jitter()+geom_smooth(method = 'lm')+
-  theme_minimal()+ylim(0,100)+
-  scale_color_brewer(palette = 'Set2')
-
-names(ge2)
