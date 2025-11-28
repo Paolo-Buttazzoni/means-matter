@@ -7,6 +7,9 @@ library(emmeans)
 library(ggrepel)
 library(viridis) # For color-blind-friendly palettes
 
+# 'Do means matter morally?' Study 2a: qualitative ####
+
+
 # Function to Read and Prepare Data
 read_qualtrics <- function(filename) {
   headers <- read_csv(filename, col_names = FALSE, n_max = 1) %>% as.character()
@@ -18,10 +21,11 @@ read_qualtrics <- function(filename) {
 #Qualitative_Do_Means_Matter_Morally!!
 
 # Load Data
-mm2a <- read_qualtrics('study2a/study2a.csv')
 
-mm2a = mm2a %>%
-  filter(Progress == 100, !is.na(PROLIFIC_PID)) %>%
+mm2a_raw <- read_qualtrics('study2a/study2a_anon.csv')
+
+mm2a = mm2a_raw %>%
+  filter(Progress == 100, !is.na(anon_id)) %>%
   mutate(
     Endorsement = if_else(choice == 4, 'Difference', 'Equivalence'),
     Conservatism = (politics_1 + politics_2 + politics_3) / 3,
@@ -35,22 +39,44 @@ mm2a = mm2a %>%
     #extract UK or US
     country = str_sub(strata, -2))
 
-xtabs(~ Endorsement, mm2a)
-prop.test(xtabs(~ Endorsement, mm2a), p = .5)
+glimpse(mm2a)
+# Mean & SD for Age
+mm2a %>%
+  summarise(
+    mean_age = mean(age, na.rm = TRUE),
+    sd_age   = sd(age, na.rm = TRUE),
+    n        = n()
+  )
+
+# Gender
+mm2a %>%
+  count(gender) %>%
+  mutate(prop = n / sum(n))
+
+# Religiosity
+mm2a %>%
+  count(Religiosity) %>%
+  mutate(prop = n / sum(n))
+
+# Political
+mm2a %>%
+  count(Conservatism) %>%
+  mutate(prop = n / sum(n))
+
+mm2a %>%
+  summarise(
+    n_below5 = sum(Conservatism < 5, na.rm = TRUE),
+    prop_below5 = mean(Conservatism < 5, na.rm = TRUE),
+    n_total = sum(!is.na(Conservatism)))
+
+
+# Material and Measures ####
 
 mm2a = mm2a %>%
   mutate(length_char = if_else(!is.na(reasonsDiff), 
                                nchar(reasonsDiff), nchar(reasonsEquiv)), 
          spaces = if_else(!is.na(reasonsDiff), 
                           str_count(reasonsDiff, pattern = " "), str_count(reasonsEquiv, pattern = " ")))
-
-ggplot(mm2a, aes(x= length_char, fill = Endorsement)) + 
-  geom_density(alpha = .5) + 
-  theme_bw() + 
-  scale_x_log10(name = "Justification\n(length in characters)", 
-                     limits = c(20, 3000), 
-                breaks = c(30, 100, 300, 1000)) + 
-  theme(legend.position = c(.7, .7))
   
 wilcox.test(length_char ~ Endorsement, mm2a)
 
@@ -59,6 +85,14 @@ quantile(mm2a$length_char)
 quantile(mm2a$spaces)
 
 
+
+
+
+#por aquí pag. 9
+
+
+xtabs(~ Endorsement, mm2a)
+prop.test(xtabs(~ Endorsement, mm2a), p = .5)
 # Descriptive Statistics
 mm2a %>%
   group_by(Endorsement) %>%
