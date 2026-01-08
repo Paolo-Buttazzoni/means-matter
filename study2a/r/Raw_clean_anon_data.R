@@ -1,6 +1,6 @@
 library(tidyverse)
 
-#'Do means matter morally?' Study 1
+#'Do means matter morally?' Study 2a
 
 # Load dataset
 filename <- "study2a/data/identificable/study2a.csv"
