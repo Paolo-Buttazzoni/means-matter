@@ -7,8 +7,9 @@ library(psych)
 library(ggnewscale)
 library(ggpubr)
 
-#'Do means matter morally?' study 1
-# --- Step 1: Load and Clean Data ---
+#'Do means matter morally?' Study 1
+
+# --- Load and Clean Data ---
 
 # Load dataset
 filename = "study1/study1.csv"
@@ -35,6 +36,34 @@ mm1demog = mm1raw %>%
   ) %>%
   select(ResponseId, Order, Methods, Age, Gender, Endorsement, endorsement_num, Bipolar, Conservatism, Social, Fiscal, Religiosity)
 
+# --- Demographics ---
+
+# Mean & SD for Age
+mm1demog %>%
+  summarise(
+    mean_age = mean(Age, na.rm = TRUE),
+    sd_age   = sd(Age, na.rm = TRUE),
+    n        = n()
+  )
+
+# Gender
+mm1demog %>%
+  count(Gender) %>%
+  mutate(prop = n / sum(n))
+
+# Political
+mm1demog %>%
+  count(Conservatism) %>%
+  mutate(prop = n / sum(n))
+
+mm1demog %>%
+  summarise(
+    n_below5 = sum(Conservatism < 5, na.rm = TRUE),
+    prop_below5 = mean(Conservatism < 5, na.rm = TRUE),
+    n_total = sum(!is.na(Conservatism)))
+
+
+# --- Compare Conventional vs Technological DV (4 pairs) ---
 
 mm1resp = mm1raw %>%
   select(., contains(c("C1","C2", "C3", "C4", "T1", "T2", "T3", "T4")), ResponseId) %>%
@@ -51,25 +80,21 @@ mm1resp = mm1raw %>%
 mm1 = full_join(mm1demog, mm1resp) %>%
   filter(!is.na(Methods))
 
-t.test(response ~ Methods, mm1)
+
 mm1 %>%
-  group_by(condition) %>%
-  summarise(mean(response), 
-            sd(response))
+  group_by(Methods) %>%
+  summarise(
+    mean_response = mean(response, na.rm = TRUE),
+    sd_response   = sd(response, na.rm = TRUE),
+    n             = n())
+t.test(response ~ Methods, mm1)
+effectsize::cohens_d(response ~ Methods, data = mm1)
+
 
 t.test(`1` ~ condition, mm1)
 t.test(`2` ~ condition, mm1)
 t.test(`3` ~ condition, mm1)
 t.test(`4` ~ condition, mm1)
-
-effectsize::cohens_d(mm1$response,mm1$condition)
-
-anova(lm(response ~ Order*Methods, mm1))
-
-endorse_resp = lm(response ~ Methods*Endorsement, mm1)
-car::Anova(endorse_resp)
-emmeans(endorse_resp, pairwise ~ Methods | Endorsement)
-emmeans(endorse_resp, pairwise ~ Endorsement | Methods)
 
 mm1scen = mm1raw %>%
   select(., contains(c("C1","C2", "C3", "C4", "T1", "T2", "T3", "T4")), ResponseId) %>%
@@ -86,6 +111,10 @@ for (i in levels(as.factor(mm1scen$scen))) {
   print(paste("Scenario = ", i))
   print(effectsize::cohens_d(temp$response, temp$condition))
 }
+
+
+
+
 
 # Chi-square test: Are Difference and Equivalence endorsed equally?
 xtabs(~ Endorsement, mm1)
@@ -163,3 +192,17 @@ ggarrange(fig1a, ggarrange(fig1b, fig1c, nrow = 2, heights = c(1, 2),
                   labels = c('A', NULL))
 
 ggsave('Figures/Figure1.jpg', dpi = 300, width = 16, height = 12, units = 'cm')
+
+
+
+
+
+
+##### not used#####
+
+anova(lm(response ~ Order*Methods, mm1))
+
+endorse_resp = lm(response ~ Methods*Endorsement, mm1)
+car::Anova(endorse_resp)
+emmeans(endorse_resp, pairwise ~ Methods | Endorsement)
+emmeans(endorse_resp, pairwise ~ Endorsement | Methods)

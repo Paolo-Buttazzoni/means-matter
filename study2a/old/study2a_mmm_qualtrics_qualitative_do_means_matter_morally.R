@@ -20,7 +20,7 @@ read_qualtrics <- function(filename) {
 # Load Data
 mm2a <- read_qualtrics('study2a/study2a.csv')
 
-mm2a = mm2a %>%
+oldmm2a = mm2a %>%
   filter(Progress == 100, !is.na(PROLIFIC_PID)) %>%
   mutate(
     Endorsement = if_else(choice == 4, 'Difference', 'Equivalence'),
