@@ -1,5 +1,7 @@
 library(tidyverse)
 library(readr)
+library(ggtext)
+library(glmnet)
 
 #This one is 'Do means matter morally?' study 3
 filename = "study2b/study2b.csv"
@@ -195,7 +197,6 @@ mod3 = glm(biotech ~ effort + natural + useful + greatergood +
 jtools::summ(mod3, digits = 3,  confint = TRUE)
 car::vif(mod3)
 
-library(glmnet)
 
 # X = predictor matrix (standardized)
 # y = outcome vector (numeric or factor for classification)
@@ -206,7 +207,7 @@ family <- "gaussian"
 # if y is binary (logistic regression):
 # family <- "binomial"
 
-alphas <- seq(0, 1, by = 0.1)   # sweep alpha from 0 to 1
+alphas <- seq(0, 1, by = 0.001)   # sweep alpha from 0 to 1
 results <- list()
 cv_errors <- numeric(length(alphas))
 
@@ -271,7 +272,7 @@ coef(best_fit2, s = "lambda.min") %>%
   round(3)
 
 
-full_join(
+mm_fig2b_data = full_join(
 coef(best_fit2, s = "lambda.min") %>% as.matrix() %>%
   as.data.frame() %>%
   mutate(predictor = rownames(.)),
@@ -279,50 +280,139 @@ coef(best_fit, s = "lambda.min") %>% as.matrix() %>%
   as.data.frame() %>%
   mutate(predictor = rownames(.)),
 by = 'predictor') %>%
-  mutate(product = lambda.min.x * lambda.min.y) %>%
-  filter(predictor != "(Intercept)") %>%
-  ggplot(aes(x = reorder(predictor, -abs(product)), y = abs(product))) + 
-  geom_col(width = .1, color = 'black') +
-  geom_point(shape = 21, fill = 'white', stroke = 1, size = 2.5) + 
-  scale_y_continuous(limits = c(0, .0021), expand = c(0.0045, 0), 
+  mutate(product = abs(lambda.min.x * lambda.min.y), 
+         abs_x = abs(lambda.min.x) + .01,
+         abs_y = abs(lambda.min.y) + .01,
+         retain = if_else(abs(product) > .0005, 'y', 'n'), 
+         face_label = if_else(retain == "y", 'bold', 'plain')) %>%
+  filter(predictor != "(Intercept)") 
+
+
+
+fig2b_b = ggplot(mm_fig2b_data, aes(x = reorder(predictor, abs(product)), y = abs(product))) + 
+  geom_vline(xintercept = 11.5, linetype = 2) +
+  geom_col(width = .1, aes(color = retain, fill = retain)) +
+  geom_point(shape = 21, fill = 'white', stroke = 1.3, size = 2.5, 
+             aes(color = retain)) + 
+  scale_y_continuous(limits = c(0, .0021), expand = c(0, 0), 
+                     labels = c("0", "0.5", "1", "1.5", "2"),
                      name = 'Product of coefficients') +
   scale_x_discrete(name = 'Predictor') +
+  scale_color_manual(values = c('darkgrey', '#DAA520')) +
+  scale_fill_manual(values = c('darkgrey', '#DAA520')) +
   coord_flip() + 
   theme_classic() + 
   theme(axis.ticks.y = element_blank(),
       axis.text = element_text(size = 11),
-      axis.title = element_text(size = 13),
-      legend.position = 'bottom',
-      plot.margin = margin(0.3,1,0.3, 1, "cm"),
+      axis.title = element_text(size = 12),
+      legend.position = 'none',
+      plot.margin = margin(10,3,5,3, "pt"),
       legend.title = element_text(size = 10))
 
-full_join(
-  coef(best_fit2, s = "lambda.min") %>% as.matrix() %>%
-    as.data.frame() %>%
-    mutate(predictor = rownames(.)),
-  coef(best_fit, s = "lambda.min") %>% as.matrix() %>%
-    as.data.frame() %>%
-    mutate(predictor = rownames(.)),
-  by = 'predictor') %>%
-  mutate(product = lambda.min.x * lambda.min.y) %>%
-  filter(predictor != "(Intercept)") %>%
-  ggplot(aes(x = abs(lambda.min.x), y = abs(lambda.min.y))) + 
-  geom_point(shape = 21, size = .5) +
-  ggrepel::geom_text_repel(aes(label = predictor)) + 
+fig2a_a = ggplot(mm_fig2b_data, aes(x = abs_x, y = abs_y)) + 
+  geom_point(shape = 21, size = .5, aes(color = retain)) +
+  scale_color_manual(values = c('black', '#DAA520')) +
+  scale_fill_manual(values = c('darkgrey', '#DAA520')) +
+  ggrepel::geom_text_repel(aes(label = predictor, color = retain, 
+                               fontface = face_label), force_pull = 2, 
+                           segment.size = 0.3,
+                           min.segment.length = 1, force = .5) + 
   scale_y_continuous(name = 'Absolute coefficient of moral judgment model', 
-                     limits = c(0, .3)) +
+                     #breaks = c(.001, .01, .1, 1, 10), limits = c(.001, 100),
+                     breaks = c(.01, .02, .04, .08, .16, .32),
+                     transform = "log"
+                     ) +
   scale_x_continuous(name = 'Absolute coefficient of condition model',
-                     limits = c(0, .04)) +
+                    # breaks = seq(0, 0.05, 0.02), limits = c(.005, .07),
+                     #breaks = c(.001, .01, .1, 1, 10), limits = c(.001, 100),
+                     # limits = c(0, .04), 
+                     breaks = c(.01, .02, .04),
+                     transform = "log"
+                     ) +
   theme_classic() + 
   theme(axis.ticks.y = element_blank(),
         text = element_text(size = 11),
         axis.text = element_text(size = 11),
-        axis.title = element_text(size = 11),
-        legend.position = 'bottom',
-        plot.margin = margin(0.3,1,0.3, 1, "cm"),
+        axis.title = element_text(size = 12),
+        legend.position = 'none',
+        plot.margin = margin(10,3,5,3, "pt"),
         legend.title = element_text(size = 10))
 
-ggsave('Figures/Figure4a.jpg', dpi = 300, width = 15, height = 15, units = 'cm')
+
+ggpubr::ggarrange(fig2a_a, fig2b_b, labels = c('A', 'B'))
+ggsave('Figures/Figure4a_coefs.jpg', dpi = 300, width = 18, height = 12, units = 'cm')
+
+
+library(glmnet)
+
+set.seed(123)
+
+B <- 1000 # number of bootstrap resamples
+n <- nrow(X)
+boot_results <- matrix(NA, nrow = B, ncol = ncol(X))
+colnames(boot_results) <- colnames(X)
+
+alphas <- seq(0, 1, by = 0.1) # sweep alphas as before
+
+for (b in 1:B) {
+  # sample with replacement
+  idx <- sample(1:n, size = n, replace = TRUE)
+  Xb <- X[idx, ]
+  yb <- y[idx]
+  ivb <- iv[idx] # your "condition" IV
+  
+  # ----- Step 1: DV model -----
+  cv_errors <- numeric(length(alphas))
+  results <- list()
+  
+  for (i in seq_along(alphas)) {
+    cv_fit <- cv.glmnet(
+      x = as.matrix(Xb),
+      y = yb,
+      alpha = alphas[i],
+      family = "gaussian", # or "binomial" if DV is binary
+      nfolds = 10
+    )
+    results[[i]] <- cv_fit
+    cv_errors[i] <- min(cv_fit$cvm)
+  }
+  
+  best_idx <- which.min(cv_errors)
+  best_fit <- results[[best_idx]]
+  coef_dv <- as.vector(coef(best_fit, s = "lambda.min"))
+  
+  # ----- Step 2: IV model (flipped) -----
+  results <- list()
+  cv_errors <- numeric(length(alphas))
+  
+  for (i in seq_along(alphas)) {
+    cv_fit <- cv.glmnet(
+      x = as.matrix(Xb),
+      y = ivb,
+      alpha = alphas[i],
+      family = "binomial", # if IV is categorical
+      nfolds = 10
+    )
+    results[[i]] <- cv_fit
+    cv_errors[i] <- min(cv_fit$cvm)
+  }
+  
+  best_idx <- which.min(cv_errors)
+  best_fit <- results[[best_idx]]
+  coef_iv <- as.vector(coef(best_fit, s = "lambda.min"))
+  
+  # ----- Product-of-coefficients -----
+  # (exclude intercept, assume predictors in same order)
+  boot_results[b, ] <- coef_dv[-1] * coef_iv[-1]
+}
+
+# summarize bootstrap distribution
+boot_means <- apply(boot_results, 2, mean, na.rm = TRUE)
+boot_cis <- apply(boot_results, 2, quantile, probs = c(0.025, 0.975), na.rm = TRUE)
+
+# inspect results
+head(boot_means)
+head(boot_cis)
 
 install.packages('glmmPen')
 library(glmmPen)
@@ -731,8 +821,6 @@ train = mm3 %>%
 
 train = mm3 %>%
   select(effort:playgod) 
-
-
 
 # Make predictions on training set
 

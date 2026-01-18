@@ -202,34 +202,37 @@ car::Anova(mod1, test.statistic = 'F')
 
 mod1add = lmer(scale(resp) ~ Internal + Normality + Effort + Reward + (1 | scenario), dtP5)
 
-grand_effs = jtools::summ(mod1add, confint = TRUE)$coeftable %>%
+grand_effs_a = jtools::summ(mod1add, confint = TRUE)$coeftable %>%
   data.frame() %>%
   rename(estimate = Est., low_ci = X2.5., hi_ci = X97.5.) %>%
   mutate(effect = c(NA, 'Internal', 'Normality', 'Effort', 'Reward')) %>%
-  filter(!is.na(effect))
+  filter(!is.na(effect))  %>%
+  mutate(experiment = "Study 3a")
 
-mod1b = lm(scale(resp) ~ Internal * Normality * Effort * Reward * scenario, dtP5)
+mod1a = lm(scale(resp) ~ Internal * Normality * Effort * Reward * scenario, dtP5)
 
-temp = 
+temp_a = 
   bind_rows(
-    emmeans(mod1b, pairwise ~ Internal | Normality * Effort * Reward * scenario)$contrasts %>%
+    emmeans(mod1a, pairwise ~ Internal | Normality * Effort * Reward * scenario)$contrasts %>%
       data.frame() %>% mutate(effect = 'Internal'),
-    emmeans(mod1b, pairwise ~ Normality | Internal * Effort * Reward* scenario)$contrasts %>%
+    emmeans(mod1a, pairwise ~ Normality | Internal * Effort * Reward* scenario)$contrasts %>%
       data.frame() %>% mutate(effect = 'Normality'),
-    emmeans(mod1b, pairwise ~ Effort | Normality * Internal * Reward* scenario)$contrasts %>%
+    emmeans(mod1a, pairwise ~ Effort | Normality * Internal * Reward* scenario)$contrasts %>%
       data.frame() %>% mutate(effect = 'Effort'),
-    emmeans(mod1b, pairwise ~ Reward | Normality * Effort * Internal* scenario)$contrasts %>%
-      data.frame() %>% mutate(effect = 'Reward'))
+    emmeans(mod1a, pairwise ~ Reward | Normality * Effort * Internal* scenario)$contrasts %>%
+      data.frame() %>% mutate(effect = 'Reward'))  %>%
+  mutate(experiment = "Study 3a")
 
-ggplot(temp, aes(x = reorder(effect, estimate), y = estimate)) + 
+ggplot(bind_rows(temp_a, temp_b), aes(x = reorder(effect, estimate), y = estimate)) + 
   geom_violin(trim = FALSE, draw_quantiles = c(.25, .75), fill = 'skyblue',
-              ) + 
+              scale = "width") + 
   geom_hline(yintercept = 0, linetype = 2) +
   geom_jitter(width = .05, size = .7, alpha = .6, shape = 21, fill = 'white') + 
   geom_linerange(data = grand_effs, aes(ymin = -hi_ci, ymax = -low_ci)) +
-  geom_point(data = grand_effs, aes(y = -estimate), 
+  geom_point(data = bind_rows(grand_effs_a, grand_effs_b), aes(y = -estimate), 
              fill = 'white', shape = 21, size = 3) +
   coord_flip() + 
+  facet_grid(. ~ experiment) +
   theme_classic() + 
   scale_y_continuous(name = 'Semi-standardized\nregression coefficients', breaks = seq(-1, 2, 1), 
                      limits = c(-1.1, 2)) + 
@@ -242,6 +245,48 @@ ggplot(temp, aes(x = reorder(effect, estimate), y = estimate)) +
 
 ggsave('Figures/Figure5.jpg', dpi = 300, width = 12, height = 8, units = 'cm')
 
+grand_effs = bind_rows(grand_effs_a, 
+                       grand_effs_b) %>%
+  mutate(estimate = if_else(estimate < 0, -estimate, estimate),
+         low_ci = if_else(abs(low_ci) > abs(hi_ci), -hi_ci, low_ci),
+         hi_ci = if_else(abs(low_ci) > abs(hi_ci), -low_ci, hi_ci))
+
+ggplot(bind_rows(temp_a, temp_b), 
+       aes(x = reorder(effect, estimate), y = estimate, 
+           fill = experiment)) + 
+  geom_split_violin(trim = FALSE, draw_quantiles = c(.25, .75),
+                    width = .8, linewidth = .3, scale = "width") + 
+  geom_hline(yintercept = 0, linetype = 2) +
+  geom_jitter(aes(color = experiment), 
+              position = position_jitterdodge(jitter.width = .2, 
+                                              dodge.width = .3),
+              size = .7, alpha = .6, shape = 21, fill = 'white') + 
+ geom_linerange(data = bind_rows(grand_effs_a, grand_effs_b), 
+                aes(ymin = -hi_ci, ymax = -low_ci), 
+                position = position_dodge(width = .3)) +
+  geom_point(data = bind_rows(grand_effs_a, grand_effs_b), 
+             aes(y = -estimate, group = experiment), 
+             fill = 'white', shape = 21, size = 3, 
+             position = position_dodge(width = .3)) +
+  coord_flip() +
+  theme_classic() + 
+  scale_y_continuous(name = 'Semi-standardized regression coefficients', breaks = seq(-1, 2, 1), 
+                     limits = c(-1.1, 2)) + 
+  scale_x_discrete(name = NULL,   labels = c(
+    "Internal" = "Body Envelope\n(ref.: Internal)",
+    "Reward" = "Reward\n(ref.: Small)",
+    "Effort" = "Effort\n(ref.: Low)",
+    "Normality" = "Normality\n(ref.: Low)"
+  )) + 
+  scale_fill_manual(values = c('skyblue', 'brown')) +
+  scale_color_manual(values = c('skyblue', 'brown')) +
+  theme(legend.position = 'top',
+        axis.text = element_text(size= 12),
+        text = element_text(size= 12),
+        legend.title = element_blank(),
+        axis.ticks = element_blank())
+
+ggsave('Figures/Figure5_split.jpg', dpi = 300, width = 12, height = 15, units = 'cm')
 
 mod1 = lmer(scale(cheat) ~ Internal * Normality * Effort * Reward + (1 | scenario), dtP5b)
 car::Anova(mod1, test.statistic = 'F')

@@ -215,17 +215,17 @@ tempdt %>%
                            fontface = 'bold') + 
   scale_y_continuous(name = 'Frequency', limits = c(0, 30), expand = c(0, 0)) + 
   scale_x_continuous(name = 'Mean endorsement', limits = c(-.5, .53), 
-                     labels = c('Equivalence', 'Both\nequally', 'Difference'), 
+                     labels = c('Equivalence', 'Both equally', 'Difference'), 
                      breaks = c(-.4, 0, .42),
                      expand = c(0, 0)) + 
   theme(axis.ticks = element_blank(),
         axis.title = element_text(size = 12, face = 'bold'),
-        axis.text = element_text(size = 12),
+        axis.text = element_text(size = 11),
         legend.position = 'bottom',
-        plot.margin = margin(0.3,1,0.3, 1, "cm"),
+        plot.margin = margin(8,2,2, 2, "points"),
         legend.title = element_text(size = 10))
 
-ggsave('Figures/Figure2.jpg', dpi = 300, width = 13, height = 13, units = 'cm')
+ggsave('Figures/Figure2.jpg', dpi = 300, width = 15, height = 10, units = 'cm')
   
 xtabs(~ category, tempdt)
 
