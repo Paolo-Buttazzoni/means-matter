@@ -199,6 +199,10 @@ cor.test(~ resp + reward, dtP5)
 mod1 = lmer(resp ~ Internal * Normality * Effort * Reward + (1 | scenario), dtP5)
 car::Anova(mod1, test.statistic = 'F')
 
+dtP5$Internal = relevel(factor(dtP5$Internal), ref = 'External')
+dtP5$Reward = relevel(factor(dtP5$Reward), ref = 'Low')
+dtP5$Effort = relevel(factor(dtP5$Effort), ref = 'High')
+dtP5$Normality = relevel(factor(dtP5$Normality), ref = 'High')
 
 mod1add = lmer(scale(resp) ~ Internal + Normality + Effort + Reward + (1 | scenario), dtP5)
 
@@ -223,7 +227,7 @@ temp_a =
       data.frame() %>% mutate(effect = 'Reward'))  %>%
   mutate(experiment = "Study 3a")
 
-ggplot(bind_rows(temp_a, temp_b), aes(x = reorder(effect, estimate), y = estimate)) + 
+ggplot(bind_rows(temp_a, temp_b), aes(x = reorder(effect, -estimate), y = estimate)) + 
   geom_violin(trim = FALSE, draw_quantiles = c(.25, .75), fill = 'skyblue',
               scale = "width") + 
   geom_hline(yintercept = 0, linetype = 2) +
@@ -251,7 +255,8 @@ grand_effs = bind_rows(grand_effs_a,
          low_ci = if_else(abs(low_ci) > abs(hi_ci), -hi_ci, low_ci),
          hi_ci = if_else(abs(low_ci) > abs(hi_ci), -low_ci, hi_ci))
 
-ggplot(bind_rows(temp_a, temp_b), 
+ggplot(bind_rows(temp_a, temp_b) %>%
+         mutate(estimate = if_else(effect == "Reward", estimate, -estimate)), 
        aes(x = reorder(effect, estimate), y = estimate, 
            fill = experiment)) + 
   geom_split_violin(trim = FALSE, draw_quantiles = c(.25, .75),
@@ -262,31 +267,31 @@ ggplot(bind_rows(temp_a, temp_b),
                                               dodge.width = .3),
               size = .7, alpha = .6, shape = 21, fill = 'white') + 
  geom_linerange(data = bind_rows(grand_effs_a, grand_effs_b), 
-                aes(ymin = -hi_ci, ymax = -low_ci), 
+                aes(ymin = hi_ci, ymax = low_ci), 
                 position = position_dodge(width = .3)) +
   geom_point(data = bind_rows(grand_effs_a, grand_effs_b), 
-             aes(y = -estimate, group = experiment), 
+             aes(y = estimate, group = experiment), 
              fill = 'white', shape = 21, size = 3, 
              position = position_dodge(width = .3)) +
-  coord_flip() +
   theme_classic() + 
-  scale_y_continuous(name = 'Semi-standardized regression coefficients', breaks = seq(-1, 2, 1), 
-                     limits = c(-1.1, 2)) + 
+  scale_y_continuous(name = 'Semi-standardized regression coefficients', breaks = seq(-2, 2, 1), 
+                     limits = c(-2.2, 1.6)) + 
   scale_x_discrete(name = NULL,   labels = c(
-    "Internal" = "Body Envelope\n(ref.: Internal)",
+    "Internal" = "Body Envelope\n(ref.: External)",
     "Reward" = "Reward\n(ref.: Small)",
-    "Effort" = "Effort\n(ref.: Low)",
-    "Normality" = "Normality\n(ref.: Low)"
+    "Effort" = "Effort\n(ref.: High)",
+    "Normality" = "Normality\n(ref.: High)"
   )) + 
   scale_fill_manual(values = c('skyblue', 'brown')) +
   scale_color_manual(values = c('skyblue', 'brown')) +
-  theme(legend.position = 'top',
+  theme(legend.position = c(.5, .95),
+        legend.direction = "horizontal",
         axis.text = element_text(size= 12),
         text = element_text(size= 12),
         legend.title = element_blank(),
         axis.ticks = element_blank())
 
-ggsave('Figures/Figure5_split.jpg', dpi = 300, width = 12, height = 15, units = 'cm')
+ggsave('Figures/Figure6MM.png', dpi = 300, width = 16, height = 9, units = 'cm')
 
 mod1 = lmer(scale(cheat) ~ Internal * Normality * Effort * Reward + (1 | scenario), dtP5b)
 car::Anova(mod1, test.statistic = 'F')

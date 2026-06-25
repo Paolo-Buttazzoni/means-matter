@@ -54,17 +54,6 @@ mm2b_demog %>%
     prop_below5 = mean(Conservatism < 5, na.rm = TRUE),
     n_total = sum(!is.na(Conservatism)))
 
-
-
-
-
-
-
-
-
-
-
-
 glimpse(mm2b_demog)
 
 mm2b_demog %>% 
@@ -89,19 +78,19 @@ m1pos = (1:22)*3 - 2
 m2pos = (1:22)*3 - 1
 m3pos = (1:22)*3 
 
-mm2b_resps = mm2b %>%
-  select(Q167_1:Q730_4, PROLIFIC_PID) %>%
-  select(ends_with(c("_4")), PROLIFIC_PID) %>%
+mm2b_resps = mm2b_raw %>%
+  select(Q167_1:Q730_4, anon_id) %>%
+  select(ends_with(c("_4")), anon_id) %>%
   mutate(moral1 = rowSums(.[m1pos], na.rm = TRUE),
          moral2 = rowSums(.[m2pos], na.rm = TRUE),
          moral3 = rowSums(.[m3pos], na.rm = TRUE)) %>%
-  select(PROLIFIC_PID:moral3)
+  select(anon_id:moral3)
 
 glimpse(mm2b_resps)
 
-mm2b_clean = full_join(mm2b_resps, mm2b_demog, by = 'PROLIFIC_PID') %>%
+mm2b_clean = full_join(mm2b_resps, mm2b_demog, by = 'anon_id') %>%
   mutate(moral = (moral1 + moral2 + moral3)/3) %>%
-  filter(!is.na(PROLIFIC_PID), !is.na(Condition), !is.na(Scenario))
+  filter(!is.na(anon_id), !is.na(Condition), !is.na(Scenario))
 
 glimpse(mm2b_clean)
 
@@ -139,12 +128,12 @@ perP = (1:22)*16 - 1
 godP = (1:22)*16  
 
 # Verify column names in the dataset before selecting
-print(colnames(mm2b))
+print(colnames(mm2b_raw))
 
 # Create tdata3: Extract relevant columns & compute moral dimensions
-mm2b_trials = mm2b %>%
-  select(Q167_1:Q730_4, PROLIFIC_PID, Condition) %>%
-  select(ends_with("_1"), PROLIFIC_PID, Condition) %>%
+mm2b_trials = mm2b_raw %>%
+  select(Q167_1:Q730_4, anon_id, Condition) %>%
+  select(ends_with("_1"), anon_id, Condition) %>%
   mutate(
     effort = rowSums(.[effP], na.rm = TRUE),
     natural = rowSums(.[natP], na.rm = TRUE),
@@ -163,16 +152,16 @@ mm2b_trials = mm2b %>%
     changeperson = rowSums(.[perP], na.rm = TRUE), 
     playgod = rowSums(.[godP], na.rm = TRUE), 
   ) %>%
-  select(PROLIFIC_PID, Condition, effort:playgod)
+  select(anon_id, Condition, effort:playgod)
 
 glimpse(mm2b_trials)
 
 # Merge processed moral dimensions with the main dataset
 mm2b_clean = full_join(mm2b_clean %>%
-                         filter(!is.na(PROLIFIC_PID), !is.na(Condition)), 
+                         filter(!is.na(anon_id), !is.na(Condition)), 
                        mm2b_trials %>%
-                         filter(!is.na(PROLIFIC_PID), !is.na(Condition)), 
-                       by =  c('PROLIFIC_PID', 'Condition')) %>%  # Ensure valid participant IDs
+                         filter(!is.na(anon_id), !is.na(Condition)), 
+                       by =  c('anon_id', 'Condition')) %>%  # Ensure valid participant IDs
   filter(!is.na(Scenario))
 
 glimpse(mm2b_clean)
@@ -180,14 +169,14 @@ glimpse(mm2b_clean)
 # Cross-tabulation of Scenario and Condition
 xtabs(~ Scenario + Condition, mm2b_clean)
 
-xtabs(~ PROLIFIC_PID, mm2b_clean)
+xtabs(~ anon_id, mm2b_clean)
 
 mm2b_clean %>%
-  select(PROLIFIC_PID) %>%
-  group_by(PROLIFIC_PID) %>%
+  select(anon_id) %>%
+  group_by(anon_id) %>%
   tally() %>%
   filter(n > 1) %>%
-  left_join(., mm2b_clean, by = 'PROLIFIC_PID') %>%
+  left_join(., mm2b_clean, by = 'anon_id') %>%
   View()
 
 # Apply comprehension checks to filter valid responses
@@ -221,11 +210,6 @@ if (!"playgod" %in% colnames(mm2b_clean)) {
 fig1 = mm2b_clean %>%
   select(Condition, moral, starts_with("playgod")) %>%
   gather(-moral, -Condition, key = 'property', value = 'resp')
-
-install.packages("ggpubr")  # If not installed
-library(ggpubr)
-install.packages("lme4")  # Install if not already installed
-library(lme4)  # Load the package
 
 mod2 = lmer(moral ~ effort + natural + useful + greatergood + 
               autonomy +  enhancement + irreversible + unfair + 

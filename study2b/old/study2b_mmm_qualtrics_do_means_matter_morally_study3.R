@@ -4,7 +4,7 @@ library(ggtext)
 library(glmnet)
 
 #This one is 'Do means matter morally?' study 3
-filename = "study2b/study2b.csv"
+filename = "study2b/data/study2b.csv"
 headers = read_csv(filename, col_names = FALSE, n_max = 1)
 mm2b = read_csv(filename, skip = 3, col_names = FALSE)
 colnames(mm2b)= headers
@@ -173,11 +173,6 @@ fig1 = mm2b_clean %>%
   select(Condition, moral, starts_with("playgod")) %>%
   gather(-moral, -Condition, key = 'property', value = 'resp')
 
-install.packages("ggpubr")  # If not installed
-library(ggpubr)
-install.packages("lme4")  # Install if not already installed
-library(lme4)  # Load the package
-
 mod2 = lmer(moral ~ effort + natural + useful + greatergood + 
               autonomy +  enhancement + irreversible + unfair + 
               cheating + external + normal + unsafe + futurerisk + 
@@ -201,8 +196,7 @@ car::vif(mod3)
 # X = predictor matrix (standardized)
 # y = outcome vector (numeric or factor for classification)
 
-# if y is continuous (linear regression):
-family <- "gaussian"
+
 
 # if y is binary (logistic regression):
 # family <- "binomial"
@@ -211,12 +205,18 @@ alphas <- seq(0, 1, by = 0.001)   # sweep alpha from 0 to 1
 results <- list()
 cv_errors <- numeric(length(alphas))
 
-set.seed(123)  # reproducibility
+
 
 X = mm2b_clean %>%
   select(effort:playgod)
 
 y = mm2b_clean$moral
+
+
+# if y is continuous (linear regression):
+family <- "gaussian"
+
+set.seed(123)  # reproducibility
 
 for (i in seq_along(alphas)) {
   cv_fit <- cv.glmnet(
@@ -285,7 +285,9 @@ by = 'predictor') %>%
          abs_y = abs(lambda.min.y) + .01,
          retain = if_else(abs(product) > .0005, 'y', 'n'), 
          face_label = if_else(retain == "y", 'bold', 'plain')) %>%
-  filter(predictor != "(Intercept)") 
+  filter(predictor != "(Intercept)") %>%
+  mutate(predictor = if_else(predictor == "external", 
+                             "body-envelope", predictor))
 
 
 
@@ -297,12 +299,12 @@ fig2b_b = ggplot(mm_fig2b_data, aes(x = reorder(predictor, abs(product)), y = ab
   scale_y_continuous(limits = c(0, .0021), expand = c(0, 0), 
                      labels = c("0", "0.5", "1", "1.5", "2"),
                      name = 'Product of coefficients') +
-  scale_x_discrete(name = 'Predictor') +
+  scale_x_discrete(name = NULL) +
   scale_color_manual(values = c('darkgrey', '#DAA520')) +
   scale_fill_manual(values = c('darkgrey', '#DAA520')) +
   coord_flip() + 
   theme_classic() + 
-  theme(axis.ticks.y = element_blank(),
+  theme(axis.ticks = element_blank(),
       axis.text = element_text(size = 11),
       axis.title = element_text(size = 12),
       legend.position = 'none',
@@ -330,17 +332,20 @@ fig2a_a = ggplot(mm_fig2b_data, aes(x = abs_x, y = abs_y)) +
                      transform = "log"
                      ) +
   theme_classic() + 
-  theme(axis.ticks.y = element_blank(),
-        text = element_text(size = 11),
+  theme(text = element_text(size = 11),
         axis.text = element_text(size = 11),
+        axis.ticks = element_blank(),
         axis.title = element_text(size = 12),
+        axis.line = element_blank(),
+        panel.background = element_rect(fill = '#efefef', color = NA),
         legend.position = 'none',
         plot.margin = margin(10,3,5,3, "pt"),
         legend.title = element_text(size = 10))
 
 
-ggpubr::ggarrange(fig2a_a, fig2b_b, labels = c('A', 'B'))
-ggsave('Figures/Figure4a_coefs.jpg', dpi = 300, width = 18, height = 12, units = 'cm')
+ggpubr::ggarrange(fig2a_a, fig2b_b, labels = c('A', 'B'), 
+                  widths = c(1.4, 1), nrow = 1)
+ggsave('Figures/Figure3MM.png', dpi = 300, width = 18, height = 12, units = 'cm')
 
 
 library(glmnet)
@@ -566,8 +571,8 @@ levels(mm3means$Condition) = c('Technological', 'Conventional')
 
 mmDistance = mm3means %>%
   pivot_wider(names_from = 'Condition', values_from = c('resp', 'moral')) %>%
-  mutate(xDiff = resp_Conventional - resp_Biotechnological, 
-         yDiff = moral_Conventional - moral_Biotechnological, 
+  mutate(xDiff = resp_Conventional - resp_Technological, 
+         yDiff = moral_Conventional - moral_Technological, 
          diagDiff = sqrt(abs(xDiff * yDiff))) %>%
   select(item, diagDiff)
 
@@ -592,7 +597,7 @@ levels(mm3means$itemLong) = c(
 
 
 figmm3$Condition = as.factor(figmm3$Condition)
-levels(figmm3$Condition) = c('Biotechnological', 'Conventional')
+levels(figmm3$Condition) = c('Technological', 'Conventional')
 
 figmm3$itemLong = as.factor(figmm3$item)
 levels(figmm3$itemLong) = c(
@@ -601,7 +606,7 @@ levels(figmm3$itemLong) = c(
   'X cheated, or took the easy way out, to ACHIEVE-Y.',
   'ACT made X less human.',
   'To ACHIEVE-Y, X had to put in effort and hard work.',
-  'X´s actions were more like: (0) treatment or (100) enhancement.', 
+  'X´s actions were more like (0) treatment or (100) enhancement.', 
   'X ACHIEVED-Y by (0 = intervening on their insides; 100 = modifying environment).',
   'X´s actions will have (0 = good, 100 = bad) long-term consequences.',
   'X´s actions were (0 = bad, 100 = good) for society.',
@@ -624,7 +629,7 @@ figmm3 = arrange(figmm3, desc(abs(diagDiff)))
 ggplot(arrange(figmm3, desc(abs(diagDiff))), aes(x = resp, y = moral)) + 
   geom_smooth(fill = 'grey', method = 'lm', formula = y ~ x + x^2, 
               alpha = .4, color = NA) +
-  facet_wrap(~ itemLong, labeller = labeller(itemLong = label_wrap_gen(40)))
+  facet_wrap(~ itemLong, labeller = labeller(itemLong = label_wrap_gen(40))) +
   geom_point(aes(color = Condition), alpha = .5, shape = 4, size = .8) +
   geom_line(data = mm3means, aes(x = resp, y = moral, group = itemLong), linetype = 1, 
             color = 'black', linewidth = 1.2) +
@@ -651,6 +656,14 @@ anova(modItem)
 library(ggplot2)
 library(ggtext)           # for element_markdown()
 
+figmm3 = figmm3 %>%
+  mutate(item = if_else(item == "external", 
+                        "body-envelope", item))
+
+mm3means = mm3means %>%
+  mutate(item = if_else(item == "external", 
+                        "body-envelope", item))
+
 # 1) wrap itemLong to 40 characters (this inserts \n)
 figmm3$wrapped_itemLong <- ggplot2::label_wrap_gen(40)(figmm3$itemLong)
 mm3means$wrapped_itemLong <- ggplot2::label_wrap_gen(40)(mm3means$itemLong)
@@ -660,18 +673,29 @@ figmm3$wrapped_itemLong_html <- gsub("\n", "<br/>", figmm3$wrapped_itemLong)
 mm3means$wrapped_itemLong_html <- gsub("\n", "<br/>", mm3means$wrapped_itemLong)
 
 # 3) create the HTML label: bold item, line break, italic itemLong
-figmm3$facet_label_html <- paste0("<span style='font-size:12px;'><b>", figmm3$item, "</b></span><br/><i>", figmm3$wrapped_itemLong_html, "</i>")
-mm3means$facet_label_html <- paste0("<span style='font-size:12px;'><b>", mm3means$item, "</b></span><br/><i>", mm3means$wrapped_itemLong_html, "</i>")
+figmm3$facet_label_html <- paste0("<span style='font-size:13px;'><b>", figmm3$item, "</b></span><br/><i>", figmm3$wrapped_itemLong_html, "</i>")
+mm3means$facet_label_html <- paste0("<span style='font-size:13px;'><b>", mm3means$item, "</b></span><br/><i>", mm3means$wrapped_itemLong_html, "</i>")
 
 # 4) reorder the HTML labels by -abs(diagDiff)
 #    reorder() will preserve the label strings (including the HTML)
 figmm3$facet_label_html <- with(figmm3, reorder(facet_label_html, -abs(diagDiff)))
 mm3means$facet_label_html <- with(mm3means, reorder(facet_label_html, -abs(diagDiff)))
 
+glimpse(figmm3)
+glimpse(mm3means)
+
+
+mm3means %>% select(facet_label_html, diagDiff) %>%
+  distinct() %>%
+  arrange(desc(abs(diagDiff)))
+
+figmm3 %>%  ungroup() %>% select(facet_label_html, diagDiff) %>%
+  distinct() %>%
+  arrange(desc(abs(diagDiff)))
 
 ggplot(figmm3, aes(x = resp, y = moral)) + 
-  geom_smooth(fill = 'grey', method = 'lm', formula = y ~ x + x^2, 
-              alpha = .4, color = NA)+
+  geom_smooth(fill = 'grey', method = 'lm', formula = y ~ x, 
+              alpha = .4, color = NA, fullrange = TRUE)+
   geom_point(aes(color = Condition), alpha = .5, shape = 21, size = .8) +
   geom_line(data = mm3means, aes(x = resp, y = moral, group = facet_label_html), linetype = 1, 
             color = 'black', linewidth = 1) +
@@ -679,19 +703,24 @@ ggplot(figmm3, aes(x = resp, y = moral)) +
              size = 3, shape = 21, fill = 'white', stroke = 1.5) +
   facet_wrap(~ facet_label_html) + 
   theme_minimal() + theme(legend.position = 'top') + 
-  scale_color_brewer(palette = 'Dark2') + 
-  scale_fill_brewer(palette = 'Dark2') + 
-  scale_x_continuous(name = "Predictor", expand = c(0, 0),limits = c(0, 100),
+  scale_color_brewer(palette = 'Dark2', 
+                     name = "Methods",
+                     labels = c('Familiar', 'Technologically novel')
+                     ) + 
+  scale_fill_brewer(palette = 'Dark2',name = "Methods ",
+                    labels = c('Familiar', 'Technologically novel')) + 
+  scale_x_continuous(name = NULL, expand = c(0, 0),
                      breaks = c(0, 50, 100)) +
-  scale_y_continuous(name = 'Moral judgment', expand = c(0, 0), limits = c(0, 100),
+  scale_y_continuous(name = 'Moral judgment', expand = c(0, 0),
                      breaks = c(0, 50, 100)) + 
   theme(legend.position = 'bottom', panel.grid.minor = element_blank(),
-        legend.title = element_blank(), strip.text = element_markdown(size = 6),
+        strip.text = element_markdown(size = 6.5, hjust = 0),
         panel.spacing.x = grid::unit(1, "lines"),
         plot.margin = margin(0.3,1,0.3, 1, "cm")) + 
-  coord_fixed(ratio = 1, ylim = c(0, 100), xlim = c(0, 100))
+  coord_cartesian(xlim = c(0, 100), ylim = c(0, 100))
 
-ggsave('Figure2b_exp.jpg', width = 22, height = 25, dpi = 400, units = 'cm')
+ggsave('Figure4MM.png', 
+       width = 24, height = 22, dpi = 400, units = 'cm')
 
 emtrends(modItem, pairwise ~ item, var = 'resp', adjust = 'none')
 

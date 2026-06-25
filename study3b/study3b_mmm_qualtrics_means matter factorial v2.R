@@ -82,7 +82,7 @@ glimpse(ivFactors)
 ivFactors$scenario = as.factor(ivFactors$scenario)
 levels(ivFactors$scenario)
 
-dtP5 = left_join(dtP5, ivFactors, by = c('PROLIFIC_PID', 'scenario'))
+dtP5b = left_join(dtP5b, ivFactors, by = c('PROLIFIC_PID', 'scenario'))
 
 glimpse(dtP5)
 
@@ -98,9 +98,9 @@ sc = p5 %>%
   rename('safe' = AFE, 'fair' = AIR, 'cheat' = EAT, 'natural' = NAT) %>%
   unnest()
 
-dtP5 = left_join(dtP5, sc, by = c('PROLIFIC_PID', 'scenario'))
+dtP5b = left_join(dtP5b, sc, by = c('PROLIFIC_PID', 'scenario'))
 
-sumdt5 = dtP5 %>%
+sumdt5 = dtP5b %>%
   group_by(Effort, Reward, Normality, Internal, scenario) %>%
   summarise(moral = mean(resp, na.rm =TRUE), 
             effort = mean(effort, na.rm = TRUE),
@@ -113,7 +113,7 @@ xtabs(~ Ef + Effort, dtP5)
 glimpse(dtP5)
 
 
-dtP5 = dtP5 %>%
+dtP5b = dtP5b %>%
   mutate(pass_n = case_when(Normality == 'High' & No == 1 ~ 'pass',
                             Normality == 'Low' & No == 4 & scenario == 'COG' ~ 'pass',
                             Normality == 'Low' & No == 2 & scenario == 'COS' ~ 'pass',
@@ -231,7 +231,12 @@ mod1add = lmer(scale(cheat) ~ Internal + Normality + Effort + Reward + (1 | scen
                subset(dtP5b, total_pass == 4))
 car::Anova(mod1add)
 
-mod1add = lmer(scale(safe) ~ Internal + Normality + Effort + Reward + (1 | scenario), 
+dtP5b$Internal = relevel(factor(dtP5b$Internal), ref = 'External')
+dtP5b$Reward = relevel(factor(dtP5b$Reward), ref = 'Low')
+dtP5b$Effort = relevel(factor(dtP5b$Effort), ref = 'High')
+dtP5b$Normality = relevel(factor(dtP5b$Normality), ref = 'High')
+
+mod1add = lmer(scale(resp) ~ Internal + Normality + Effort + Reward + (1 | scenario), 
                subset(dtP5b, total_pass == 4))
 car::Anova(mod1add)
 jtools::summ(mod1add, digits = 3, confint = TRUE)
@@ -243,7 +248,7 @@ grand_effs_b = jtools::summ(mod1add, confint = TRUE)$coeftable %>%
   filter(!is.na(effect)) %>%
   mutate(experiment = "Study 3b")
 
-mod1b = lm(scale(resp) ~ Internal * Normality * Effort * Reward * scenario, dtP5)
+mod1b = lm(scale(resp) ~ Internal * Normality * Effort * Reward * scenario, dtP5b)
 
 temp_b = 
   bind_rows(
