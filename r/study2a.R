@@ -1,24 +1,21 @@
-# Load Required Libraries
+
+#Study 2a: open-ended justifications
+
+
+# Load necessary libraries
 library(tidyverse)
 library(psych)
 library(emmeans)
 library(ggrepel)
 library(lme4)
+library(dplyr)
+library(epitools)
 
-# 'Do means matter morally?' Study 2a: qualitative ####
 
+# Load necessary functions
+source("r/functions.R")
 
-# Function to Read and Prepare Data
-read_qualtrics <- function(filename) {
-  headers <- read_csv(filename, col_names = FALSE, n_max = 1) %>% as.character()
-  data <- read_csv(filename, skip = 3, col_names = FALSE)
-  colnames(data) <- headers
-  return(data)
-}
-
-# Load Data
-
-mm2a_raw <- read_qualtrics('study2a/data/anonymized/study2a_anon.csv')
+mm2a_raw <- read_qualtrics('data/study2a/study2a_anon.csv')
 mm2a = mm2a_raw %>%
   filter(Progress == 100, !is.na(anon_id)) %>%
   mutate(
@@ -58,58 +55,30 @@ mm2a %>%
   count(Conservatism) %>%
   mutate(prop = n / sum(n))
 
+
 mm2a %>%
   summarise(
     n_below5 = sum(Conservatism < 5, na.rm = TRUE),
     prop_below5 = mean(Conservatism < 5, na.rm = TRUE),
     n_total = sum(!is.na(Conservatism)))
 
+#endorsement
 
-# Material and Measures ####
-
-mm2a = mm2a %>%
+mm2a <- mm2a %>%
   mutate(length_char = if_else(!is.na(reasonsDiff), 
                                nchar(reasonsDiff), nchar(reasonsEquiv)), 
          spaces = if_else(!is.na(reasonsDiff), 
-                          str_count(reasonsDiff, pattern = " "), str_count(reasonsEquiv, pattern = " ")))
-  
-
-
-DescTools::MedianCI(mm2a$length_char)
-quantile(mm2a$length_char)
-quantile(mm2a$spaces)
-
+                          str_count(reasonsDiff, pattern = " "), 
+                          str_count(reasonsEquiv, pattern = " ")))
 
 xtabs(~ Endorsement, mm2a)
 prop.test(xtabs(~ Endorsement, mm2a), p = .5)
 
 
-
-# Prepare Data for Justification Analysis
-just1 <- mm2a %>%
-  select(reasonsDiff, reasonsEquiv, Endorsement, anon_id) %>%
-  pivot_longer(cols = starts_with('reasons'), names_to = 'key', values_to = 'response', values_drop_na = TRUE) %>%
-  select(-key)
-
-write.csv(just1, 'study2a/data/anonymized/justifications.csv', row.names = FALSE)
-
-# Function to Process Coder Data
-process_coder_data <- function(filename) {
-  codes <- read_csv(filename, show_col_types = FALSE)
-  codes %>%
-    select(justID, anon_id, code1, code2, code3, code4, code5) %>%
-    pivot_longer(cols = starts_with('code'), names_to = 'tag', values_to = 'category', values_drop_na = TRUE) %>%
-    select(-tag) %>%
-    mutate(code = 1) %>%
-    filter(category != '', category != 'NA') %>%
-    pivot_wider(names_from = category, values_from = code, values_fill = 0) %>%
-    arrange(justID)
-}
-
-codesI <- process_coder_data('study2a/data/anonymized/coder1_anon.csv') %>% 
+codesI <- process_coder_data('data/study2a/coder1_anon.csv') %>% 
   pivot_longer(cols = -c(justID, anon_id), names_to = 'category', values_to = 'c1resp')
 
-codesII <- process_coder_data('study2a/data/anonymized/coder2_anon.csv') %>% 
+codesII <- process_coder_data('data/study2a/coder2_anon.csv') %>% 
   pivot_longer(cols = -c(justID, anon_id), names_to = 'category', values_to = 'c2resp')
 
 codes <- full_join(codesI, codesII, by = c('justID', 'category', 'anon_id')) %>%
@@ -119,19 +88,33 @@ codes <- full_join(codesI, codesII, by = c('justID', 'category', 'anon_id')) %>%
            c1resp + c2resp == 0 ~ 'Absent'
          ))
 
-# Cohen's Kappa
+# Inter-rater reliability
 cohen_kappa <- psych::cohen.kappa(x = cbind(codes$c1resp, codes$c2resp))
+cohen_kappa
 
 
-mm2a_codes = codes %>%
-  mutate(just_value = present == 'Present') %>%
+tiebreak_raw <- read_csv('data/study2a/code_tiebreaker_anon.csv')
+
+tiebreak_lookup <- tiebreak_raw %>%
+  select(justID, category, anon_id, resolve)
+
+codes_tb <- codes %>%
+  left_join(tiebreak_lookup, by = c('justID', 'category', 'anon_id')) %>%
+  mutate(
+    Present = if_else(status == 'Disagreement' & resolve == 1, 'Present', present)
+  )
+
+codes_tb %>% count(Present)
+
+
+mm2a_codes <- codes_tb %>%
+  mutate(just_value = Present == 'Present') %>%
   full_join(mm2a, by = 'anon_id')
 
-mod_just = glmer(just_value ~ category * Endorsement + (1 | anon_id), 
-                 mm2a_codes, family = 'binomial')
+mod_just <- glmer(just_value ~ category * Endorsement + (1 | anon_id),
+                  mm2a_codes, family = 'binomial')
 
 emm_results <- emmeans(mod_just, pairwise ~ Endorsement | category, type = 'response')
-
 emm_probs <- as.data.frame(emm_results$emmeans)
 
 rr_table <- emm_probs %>%
@@ -139,30 +122,34 @@ rr_table <- emm_probs %>%
   pivot_wider(names_from = Endorsement, values_from = prob) %>%
   mutate(
     RR_Equivalence_vs_Difference = round(Equivalence / Difference, 4),
-    RR_Difference_vs_Equivalence = round(Difference / Equivalence, 4),
-    Difference = round(Difference, 4),
-    Equivalence = round(Equivalence, 4)
+    RR_Difference_vs_Equivalence = round(Difference / Equivalence, 4)
   )
 
-options(scipen = 999)
-print.data.frame(rr_table, digits = 3)
+rr_table %>% filter(category %in% c("UTILITY", "NOHARM", "AUTONOMY", "EFFORT", "NATURAL", "UNSAFE"))
+
+# Contrasts (ratio, SE, z-ratio, p-value directly from emmeans)
+emm_results$contrasts %>% 
+  as.data.frame() %>% 
+  filter(category %in% c("UTILITY", "NOHARM", "AUTONOMY", "EFFORT", "NATURAL", "UNSAFE"))
 
 
-# Visualization Figure 2
+
+emm_only <- emmeans(mod_just, ~ Endorsement | category, type = 'response')
+
+emm_contrasts_flipped <- pairs(emm_only, reverse = TRUE)
+
+emm_contrasts_flipped %>% 
+  as.data.frame() %>% 
+  filter(category %in% c("UTILITY", "NOHARM", "AUTONOMY", "EFFORT", "NATURAL", "UNSAFE"))
+
+
+#Figure 3 ####
 tempdt <- codes %>%
   filter(present == 'Present') %>%
   left_join(mm2a, by = 'anon_id') %>%
   mutate(difference = Endorsement == 'Difference')
-glimpse(tempdt)
 
-
-
-jmod <- glm(difference ~ category, tempdt, family = 'binomial')
-fig1 <- as.data.frame(emmeans(jmod, ~ category, adjust = 'none', type = 'response'))
-
-
-
-tempdt %>%
+fig3 <- tempdt %>%
   group_by(category) %>%
   summarise(mean_diff = mean(difference, na.rm = TRUE) - .5, 
             freq = n()) %>%
@@ -176,7 +163,7 @@ tempdt %>%
   geom_col(width = .005, position = 'identity') + 
   geom_point(size = 1, fill = 'white', shape = 21, stroke = 1, color = 'black') +
   ggrepel::geom_label_repel(aes(label = category), xlim = c(-.5, .5), 
-                           fontface = 'bold') + 
+                            fontface = 'bold') + 
   scale_y_continuous(name = 'Frequency', limits = c(0, 30), expand = c(0, 0)) + 
   scale_x_continuous(name = 'Mean endorsement', limits = c(-.5, .53), 
                      labels = c('Equivalence', 'Both\nequally', 'Difference'), 
@@ -189,4 +176,4 @@ tempdt %>%
         plot.margin = margin(0.3,1,0.3, 1, "cm"),
         legend.title = element_text(size = 10))
 
-ggsave('Figures/Figure2.jpg', dpi = 300, width = 13, height = 13, units = 'cm')
+ggsave('Figures/Figure3.png', dpi = 300, width = 17, height = 13, units = 'cm')

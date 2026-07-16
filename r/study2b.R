@@ -1,82 +1,27 @@
-library(tidyverse)
-library(readr)
 
-# 'Do means matter morally?' study 2b
+#Study 2b: sixteen-property measurement
+rm(list = ls())  
 
-# Function to Read and Prepare Data
-read_qualtrics <- function(filename) {
-  headers <- read_csv(filename, col_names = FALSE, n_max = 1) %>% as.character()
-  data <- read_csv(filename, skip = 3, col_names = FALSE)
-  colnames(data) <- headers
-  return(data)
-}
+# Load necessary libraries
+library(lme4)
+library(lmerTest) 
+library(jtools)
+library(car)
+library(MuMIn)
 
-# Load Data
-mm2b_raw <- read_qualtrics('study2b/data/study2b_anon.csv')
+# Load necessary functions
+source("r/functions.R")
 
+
+mm2b_raw <- read_qualtrics('data/study2b/study2b_anon.csv')
 
 mm2b_demog = mm2b_raw %>%
   select(Progress, Duration = `Duration (in seconds)`, RecordedDate, anon_id, Condition, Scenario, 
          age:politics_2, Comp1 = Q544, Comp2 = Q545, choice, rating = rating_1) %>%
   filter(!is.na(anon_id), Progress == 100, !is.na(choice)) %>% 
-  mutate(
-    Conservatism = (politics_1 + politics_2) / 2
-  )
+  mutate(Conservatism = (politics_1 + politics_2) / 2)
 
-glimpse(mm2b_demog)
-# Mean & SD for Age
-mm2b_demog %>%
-  summarise(
-    mean_age = mean(age, na.rm = TRUE),
-    sd_age   = sd(age, na.rm = TRUE),
-    n        = n()
-  )
-
-# Gender
-# codes man = 21, woman = 22, non-bonay = 23
-mm2b_demog %>%
-  count(gender) %>%
-  mutate(prop = n / sum(n))
-
-# Religiosity
-mm2b_demog %>%
-  count(religiosity_1) %>%
-  mutate(prop = n / sum(n))
-
-# Political
-mm2b_demog %>%
-  count(Conservatism) %>%
-  mutate(prop = n / sum(n))
-
-mm2b_demog %>%
-  summarise(
-    n_below5 = sum(Conservatism < 5, na.rm = TRUE),
-    prop_below5 = mean(Conservatism < 5, na.rm = TRUE),
-    n_total = sum(!is.na(Conservatism)))
-
-glimpse(mm2b_demog)
-
-mm2b_demog %>% 
-  select(anon_id) %>%
-  distinct()
-
-#previous code to load, filter and format data
-#make a historgram of how long people took for survey
-#hist(pdata3$Duration)
-
-#demographic traits
-#t.test(religiosity_1 ~ choice, pdata3)
-#t.test(politics_1 ~ choice, pdata3)
-#t.test(politics_2 ~ choice, pdata3)
-#t.test(age ~ choice, pdata3)
-#xtabs(~ gender + choice, pdata3)
-
-#M1 approve or disapprove of action
-#M2 should other people be encouraged or discouraged?
-#M3 from a moral pov, what Jesse did is XX
-m1pos = (1:22)*3 - 2
-m2pos = (1:22)*3 - 1
-m3pos = (1:22)*3 
+m1pos = (1:22)*3 - 2; m2pos = (1:22)*3 - 1; m3pos = (1:22)*3
 
 mm2b_resps = mm2b_raw %>%
   select(Q167_1:Q730_4, anon_id) %>%
@@ -86,101 +31,35 @@ mm2b_resps = mm2b_raw %>%
          moral3 = rowSums(.[m3pos], na.rm = TRUE)) %>%
   select(anon_id:moral3)
 
-glimpse(mm2b_resps)
-
 mm2b_clean = full_join(mm2b_resps, mm2b_demog, by = 'anon_id') %>%
   mutate(moral = (moral1 + moral2 + moral3)/3) %>%
-  filter(!is.na(anon_id), !is.na(Condition), !is.na(Scenario))
+  filter(!is.na(anon_id), !is.na(Condition), !is.na(Scenario)) %>%
+  distinct(anon_id, Condition, .keep_all = TRUE)   # dedupe BEFORE merging properties
 
-glimpse(mm2b_clean)
+properties <- c("effort","natural","useful","greatergood","autonomy","enhancement",
+                "irreversible","unfair","cheating","external","normal","unsafe",
+                "futurerisk","dehumanize","changeperson","playgod")
 
-t.test(moral ~ Condition, mm2b_clean)
-
-mod1b = lm(moral ~ Condition*Scenario, mm2b_clean)
-anova(mod1b)
-
-effectsize::cohens_d(mm2b_clean$moral, mm2b_clean$Condition)
-
-#to check with Ivar, why are some conditions NA?
-ggplot(mm2b_clean %>% filter(!is.na(Condition)), aes(x = moral, group = Condition, color = Condition)) + 
-  geom_density()
-
-mm2b_clean %>%
-  select(moral1:moral3) %>%
-  psych::alpha(., check.keys = TRUE)
-
-# Define column positions (make sure these are correct)
-effP = (1:22)*16 - 15
-natP = (1:22)*16 - 14
-useP = (1:22)*16 - 13
-socP = (1:22)*16 - 12
-autP = (1:22)*16 - 11
-tedP = (1:22)*16 - 10
-revP = (1:22)*16 - 9
-unfP = (1:22)*16 - 8
-cheP = (1:22)*16 - 7
-extP = (1:22)*16 - 6
-norP = (1:22)*16 - 5
-safP = (1:22)*16 - 4
-futP = (1:22)*16 - 3
-dehP = (1:22)*16 - 2
-perP = (1:22)*16 - 1
-godP = (1:22)*16  
-
-# Verify column names in the dataset before selecting
-print(colnames(mm2b_raw))
-
-# Create tdata3: Extract relevant columns & compute moral dimensions
-mm2b_trials = mm2b_raw %>%
+mm2b_trials <- mm2b_raw %>%
+  filter(Progress == 100) %>%              # <-- add this
   select(Q167_1:Q730_4, anon_id, Condition) %>%
-  select(ends_with("_1"), anon_id, Condition) %>%
-  mutate(
-    effort = rowSums(.[effP], na.rm = TRUE),
-    natural = rowSums(.[natP], na.rm = TRUE),
-    useful = rowSums(.[useP], na.rm = TRUE), 
-    greatergood = rowSums(.[socP], na.rm = TRUE),
-    autonomy = rowSums(.[autP], na.rm = TRUE),
-    enhancement = rowSums(.[tedP], na.rm = TRUE), 
-    irreversible = rowSums(.[revP], na.rm = TRUE),
-    unfair = rowSums(.[unfP], na.rm = TRUE),
-    cheating = rowSums(.[cheP], na.rm = TRUE), 
-    external = rowSums(.[extP], na.rm = TRUE),
-    normal = rowSums(.[norP], na.rm = TRUE),
-    unsafe = rowSums(.[safP], na.rm = TRUE), 
-    futurerisk = rowSums(.[futP], na.rm = TRUE),
-    dehumanize = rowSums(.[dehP], na.rm = TRUE),
-    changeperson = rowSums(.[perP], na.rm = TRUE), 
-    playgod = rowSums(.[godP], na.rm = TRUE), 
-  ) %>%
-  select(anon_id, Condition, effort:playgod)
+  select(ends_with("_1"), anon_id, Condition)
 
-glimpse(mm2b_trials)
+item_cols <- mm2b_trials %>% select(-anon_id, -Condition)
 
-# Merge processed moral dimensions with the main dataset
-mm2b_clean = full_join(mm2b_clean %>%
-                         filter(!is.na(anon_id), !is.na(Condition)), 
-                       mm2b_trials %>%
-                         filter(!is.na(anon_id), !is.na(Condition)), 
-                       by =  c('anon_id', 'Condition')) %>%  # Ensure valid participant IDs
+for (i in seq_along(properties)) {
+  pos <- (1:22) * 16 + (i - 16)
+  mm2b_trials[[properties[i]]] <- rowSums(item_cols[pos], na.rm = TRUE)
+}
+
+mm2b_trials <- mm2b_trials %>%
+  select(anon_id, Condition, all_of(properties))
+
+mm2b_clean = full_join(mm2b_clean, mm2b_trials, by = c('anon_id', 'Condition')) %>%
   filter(!is.na(Scenario))
 
-glimpse(mm2b_clean)
-
-# Cross-tabulation of Scenario and Condition
-xtabs(~ Scenario + Condition, mm2b_clean)
-
-xtabs(~ anon_id, mm2b_clean)
-
-mm2b_clean %>%
-  select(anon_id) %>%
-  group_by(anon_id) %>%
-  tally() %>%
-  filter(n > 1) %>%
-  left_join(., mm2b_clean, by = 'anon_id') %>%
-  View()
-
-# Apply comprehension checks to filter valid responses
-mm2b_clean = mm2b_clean %>%
+# comprehension checks — this is what should get you close to N = 559
+mm2b_clean <- mm2b_clean %>%
   mutate(
     check2 = case_when(
       Scenario == 'Anxiety' & Comp2 == 18 ~ 'Keep', 
@@ -198,13 +77,115 @@ mm2b_clean = mm2b_clean %>%
     check1 = case_when(
       Condition == 'Conventional' & Comp1 < 12 ~ 'Keep', 
       Condition == 'Biotechnological' & Comp1 > 11 ~ 'Keep'
-    )) %>%
+    )
+  ) %>%
   filter(check2 == 'Keep', check1 == 'Keep')
 
-# Verify that 'playgod' exists before selecting it
-if (!"playgod" %in% colnames(mm2b_clean)) {
-  warning("Column 'playgod' not found in mm3c. It may not have been included in the dataset.")
-}
+nrow(mm2b_clean)   # check this against 559 before fitting anything
+
+vars16 <- c("effort","natural","useful","greatergood","autonomy","enhancement",
+            "irreversible","unfair","cheating","external","normal","unsafe",
+            "futurerisk","dehumanize","changeperson","playgod")
+
+mm2b_z <- mm2b_clean %>%
+  mutate(across(all_of(vars16), ~ as.numeric(scale(.))),
+         moral_z = as.numeric(scale(moral)))
+
+mod2z <- lmerTest::lmer(
+  moral_z ~ effort + natural + useful + greatergood + autonomy +
+    enhancement + irreversible + unfair + cheating + external +
+    normal + unsafe + futurerisk + dehumanize + changeperson + playgod +
+    (1 | Scenario),
+  data = mm2b_z
+)
+
+summary(mod2z)
+confint(mod2z, method = "Wald")
+AIC(mod2z)
+MuMIn::r.squaredGLMM(mod2z)
+car::vif(mod2z)
+
+
+# how many rows before check1/check2 filtering?
+mm2b_pre_check <- full_join(
+  full_join(mm2b_resps, mm2b_demog, by = 'anon_id') %>%
+    mutate(moral = (moral1 + moral2 + moral3)/3) %>%
+    filter(!is.na(anon_id), !is.na(Condition), !is.na(Scenario)) %>%
+    distinct(anon_id, Condition, .keep_all = TRUE),
+  mm2b_trials, by = c('anon_id','Condition')
+) %>% filter(!is.na(Scenario))
+
+nrow(mm2b_pre_check)  # N before comprehension checks
+
+# how many pass check1 alone, check2 alone, both?
+mm2b_pre_check %>%
+  mutate(
+    check1 = case_when(
+      Condition == 'Conventional' & Comp1 < 12 ~ 'Keep', 
+      Condition == 'Biotechnological' & Comp1 > 11 ~ 'Keep'
+    ),
+    check2 = case_when(
+      Scenario == 'Anxiety' & Comp2 == 18 ~ 'Keep', 
+      Scenario == 'Bullying' & Comp2 == 16 ~ 'Keep', 
+      Scenario == 'Cognitive1' & Comp2 == 19 ~ 'Keep', 
+      Scenario == 'Cognitive2' & Comp2 == 21 ~ 'Keep', 
+      Scenario == 'Doping' & Comp2 == 14 ~ 'Keep', 
+      Scenario == 'Height' & Comp2 == 12 ~ 'Keep', 
+      Scenario == 'HIV' & Comp2 == 13 ~ 'Keep', 
+      Scenario == 'Muscle' & Comp2 == 1 ~ 'Keep', 
+      Scenario == 'Musical' & Comp2 == 20 ~ 'Keep', 
+      Scenario == 'Prison' & Comp2 == 17 ~ 'Keep', 
+      Scenario == 'School' & Comp2 == 15 ~ 'Keep'
+    )
+  ) %>%
+  summarise(
+    n_total = n(),
+    n_check1_keep = sum(check1 == 'Keep', na.rm = TRUE),
+    n_check1_na   = sum(is.na(check1)),
+    n_check2_keep = sum(check2 == 'Keep', na.rm = TRUE),
+    n_check2_na   = sum(is.na(check2)),
+    n_both = sum(check1 == 'Keep' & check2 == 'Keep', na.rm = TRUE)
+  )
+
+
+
+mm2b_pre_check %>%
+  mutate(
+    check2 = case_when(
+      Scenario == 'Anxiety' & Comp2 == 18 ~ 'Keep', 
+      Scenario == 'Bullying' & Comp2 == 16 ~ 'Keep', 
+      Scenario == 'Cognitive1' & Comp2 == 19 ~ 'Keep', 
+      Scenario == 'Cognitive2' & Comp2 == 21 ~ 'Keep', 
+      Scenario == 'Doping' & Comp2 == 14 ~ 'Keep', 
+      Scenario == 'Height' & Comp2 == 12 ~ 'Keep', 
+      Scenario == 'HIV' & Comp2 == 13 ~ 'Keep', 
+      Scenario == 'Muscle' & Comp2 == 1 ~ 'Keep', 
+      Scenario == 'Musical' & Comp2 == 20 ~ 'Keep', 
+      Scenario == 'Prison' & Comp2 == 17 ~ 'Keep', 
+      Scenario == 'School' & Comp2 == 15 ~ 'Keep'
+    )
+  ) %>%
+  filter(is.na(check2)) %>%
+  count(Scenario, Comp2) %>%
+  arrange(Scenario, Comp2)
+
+
+mm2b_pre_check %>%
+  mutate(
+    check1 = case_when(
+      Condition == 'Conventional' & Comp1 < 12 ~ 'Keep', 
+      Condition == 'Biotechnological' & Comp1 > 11 ~ 'Keep'
+    )
+  ) %>%
+  filter(is.na(check1)) %>%
+  count(Condition, Comp1) %>%
+  arrange(Condition, Comp1)
+
+mm2b_pre_check %>% count(Scenario)
+
+mm2b_raw %>% filter(anon_id %in% c("anon_208","anon_398","anon_443","anon_479","anon_556","anon_582")) %>%
+  select(anon_id, Progress, Duration = `Duration (in seconds)`, Condition, Scenario)
+
 
 # Create figure data
 fig1 = mm2b_clean %>%
