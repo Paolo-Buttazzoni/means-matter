@@ -79,20 +79,20 @@ mm2b_clean <- full_join(mm2b_clean, mm2b_trials, by = c('anon_id', 'Condition'))
 mm2b_clean <- mm2b_clean %>%
   mutate(
     check2 = case_when(
-      Scenario == 'Anxiety'    & Comp2 == 18 ~ 'Keep',
-      Scenario == 'Bullying'   & Comp2 == 16 ~ 'Keep',
+      Scenario == 'Anxiety' & Comp2 == 18 ~ 'Keep',
+      Scenario == 'Bullying' & Comp2 == 16 ~ 'Keep',
       Scenario == 'Cognitive1' & Comp2 == 19 ~ 'Keep',
       Scenario == 'Cognitive2' & Comp2 == 21 ~ 'Keep',
-      Scenario == 'Doping'     & Comp2 == 14 ~ 'Keep',
-      Scenario == 'Height'     & Comp2 == 12 ~ 'Keep',
-      Scenario == 'HIV'        & Comp2 == 13 ~ 'Keep',
-      Scenario == 'Muscle'     & Comp2 == 1  ~ 'Keep',
-      Scenario == 'Musical'    & Comp2 == 20 ~ 'Keep',
-      Scenario == 'Prison'     & Comp2 == 17 ~ 'Keep',
-      Scenario == 'School'     & Comp2 == 15 ~ 'Keep'
+      Scenario == 'Doping' & Comp2 == 14 ~ 'Keep',
+      Scenario == 'Height' & Comp2 == 12 ~ 'Keep',
+      Scenario == 'HIV' & Comp2 == 13 ~ 'Keep',
+      Scenario == 'Muscle' & Comp2 == 1  ~ 'Keep',
+      Scenario == 'Musical' & Comp2 == 20 ~ 'Keep',
+      Scenario == 'Prison' & Comp2 == 17 ~ 'Keep',
+      Scenario == 'School' & Comp2 == 15 ~ 'Keep'
     ),
     check1 = case_when(
-      Condition == 'Conventional'     & Comp1 < 12  ~ 'Keep',
+      Condition == 'Conventional' & Comp1 < 12  ~ 'Keep',
       Condition == 'Biotechnological' & Comp1 > 11  ~ 'Keep'
     )
   ) %>%
@@ -130,8 +130,7 @@ mod3z <- glmer(
     enhancement + irreversible + unfair + cheating + external +
     normal + unsafe + futurerisk + dehumanize + changeperson + playgod +
     (1 | Scenario),
-  data = mm2b_z, family = 'binomial'
-)
+  data = mm2b_z, family = 'binomial')
 
 summary(mod3z)
 confint(mod3z, method = "Wald")
@@ -141,7 +140,6 @@ mod3z_null <- glmer(biotech ~ 1 + (1 | Scenario), data = mm2b_z, family = 'binom
 McFadden_R2 <- 1 - (logLik(mod3z) / logLik(mod3z_null))
 McFadden_R2
 AIC(mod3z)
-
 
 
 # Figure 4
@@ -180,34 +178,34 @@ figmm3 <- left_join(figmm3, mmDistance, by = 'item')
 mm3means <- left_join(mm3means, mmDistance, by = 'item')
 
 item_labels <- c(
-  effort       = "To ACHIEVE-Y, X had to put in effort and hard work.",
-  natural      = "ACT is (0 = natural, 100 = artificial).",
-  useful       = "ACT was a useful and efficient way of ACHIEVING-Y.",
-  greatergood  = "X's actions were (0 = bad, 100 = good) for society.",
-  autonomy     = "X's actions violated someone's autonomy.",
-  enhancement  = "X's actions were more like (0) treatment or (100) enhancement.",
+  effort = "To ACHIEVE-Y, X had to put in effort and hard work.",
+  natural = "ACT is (0 = natural, 100 = artificial).",
+  useful = "ACT was a useful and efficient way of ACHIEVING-Y.",
+  greatergood = "X's actions were (0 = bad, 100 = good) for society.",
+  autonomy = "X's actions violated someone's autonomy.",
+  enhancement = "X's actions were more like (0) treatment or (100) enhancement.",
   irreversible = "The changes ACT brought about in X are irreversible.",
-  unfair       = "What X did was unfair toward others.",
-  cheating     = "X cheated, or took the easy way out, to ACHIEVE-Y.",
-  external     = "X ACHIEVED-Y by (0 = intervening on their insides; 100 = modifying environment).",
-  normal       = "X ACHIEVED-Y through (0 = new/unusual; 100 = established/usual) means.",
-  unsafe       = "The methods X used to ACHIEVE-Y were (0 = safe, 100 = unsafe).",
-  futurerisk   = "X's actions will have (0 = good, 100 = bad) long-term consequences.",
-  dehumanize   = "ACT made X less human.",
+  unfair = "What X did was unfair toward others.",
+  cheating = "X cheated, or took the easy way out, to ACHIEVE-Y.",
+  external = "X ACHIEVED-Y by (0 = intervening on their insides; 100 = modifying environment).",
+  normal = "X ACHIEVED-Y through (0 = new/unusual; 100 = established/usual) means.",
+  unsafe = "The methods X used to ACHIEVE-Y were (0 = safe, 100 = unsafe).",
+  futurerisk = "X's actions will have (0 = good, 100 = bad) long-term consequences.",
+  dehumanize = "ACT made X less human.",
   changeperson = "ACT changed who X is as a person.",
-  playgod      = "ACT to ACHIEVE-Y is like playing God."
+  playgod = "ACT to ACHIEVE-Y is like playing God."
 )
 
-figmm3$itemLong  <- item_labels[figmm3$item]
+figmm3$itemLong <- item_labels[figmm3$item]
 mm3means$itemLong <- item_labels[mm3means$item]
 
-figmm3   <- figmm3   %>% mutate(item = if_else(item == "external", "body-envelope", item))
+figmm3 <- figmm3   %>% mutate(item = if_else(item == "external", "body-envelope", item))
 mm3means <- mm3means %>% mutate(item = if_else(item == "external", "body-envelope", item))
 
-figmm3$wrapped_itemLong   <- label_wrap_gen(40)(figmm3$itemLong)
+figmm3$wrapped_itemLong <- label_wrap_gen(40)(figmm3$itemLong)
 mm3means$wrapped_itemLong <- label_wrap_gen(40)(mm3means$itemLong)
 
-figmm3$wrapped_itemLong_html   <- gsub("\n", "<br/>", figmm3$wrapped_itemLong)
+figmm3$wrapped_itemLong_html <- gsub("\n", "<br/>", figmm3$wrapped_itemLong)
 mm3means$wrapped_itemLong_html <- gsub("\n", "<br/>", mm3means$wrapped_itemLong)
 
 figmm3$facet_label_html <- paste0(
@@ -253,7 +251,7 @@ properties <- c("effort", "natural", "useful", "greatergood", "autonomy",
                 "normal", "unsafe", "futurerisk", "dehumanize", "changeperson", "playgod")
 
 X <- mm2b_clean %>% select(all_of(properties))
-y_moral   <- mm2b_clean$moral
+y_moral <- mm2b_clean$moral
 y_biotech <- as.numeric(mm2b_clean$biotech)   # convert logical to 0/1 for glmnet
 
 set.seed(123)
@@ -301,9 +299,9 @@ mm_fig_data <- full_join(coef_iv_df, coef_dv_df, by = "predictor") %>%
   filter(predictor != "(Intercept)") %>%
   mutate(
     product = abs(coef_iv * coef_dv),
-    abs_x   = abs(coef_iv) + 0.01,
-    abs_y   = abs(coef_dv) + 0.01,
-    retain  = if_else(abs(product) > 0.0005, "y", "n"),
+    abs_x = abs(coef_iv) + 0.01,
+    abs_y = abs(coef_dv) + 0.01,
+    retain = if_else(abs(product) > 0.0005, "y", "n"),
     face_label = if_else(retain == "y", "bold", "plain"),
     predictor = if_else(predictor == "external", "body-envelope", predictor)
   )

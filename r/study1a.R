@@ -11,12 +11,11 @@ library(psych)
 library(ggnewscale)
 library(ggpubr)
 
+# Load raw data
+source("r/functions.R")
+mm1a_raw <- read_qualtrics('data/study1a/study1a_anon.csv')
 
-#Load and clean the data
-filename = "data/study1_anon.csv"
-headers = read_csv(filename, col_names = FALSE, n_max = 1)
-mm1raw = read_csv(filename, skip = 3, col_names = FALSE)
-colnames(mm1raw) = headers
+
 
 # Filter to complete responses
 mm1demog = mm1raw %>%
