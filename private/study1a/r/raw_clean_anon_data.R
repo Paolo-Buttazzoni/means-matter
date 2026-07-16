@@ -3,7 +3,7 @@ library(tidyverse)
 #'Do means matter morally?' Study 1
 
 # Load dataset
-filename <- "study1/study1.csv"
+filename <- "private/study1/data/study1.csv"
 headers <- read_csv(filename, col_names = FALSE, n_max = 1)
 mm1raw <- read_csv(filename, skip = 3, col_names = FALSE)
 colnames(mm1raw) <- headers

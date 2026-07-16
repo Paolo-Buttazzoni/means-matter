@@ -1,7 +1,332 @@
+
+# Study 3a: Core analysis
+
+
+# Load packages
+library(tidyverse)
+library(lme4)
+library(lmerTest)
+library(jtools)
+library(emmeans)
+
+filename <- "data/study3a/study3a_anon.csv"
+headers  <- read_csv(filename, col_names = FALSE, n_max = 1)
+study3a  <- read_csv(filename, skip = 3, col_names = FALSE)
+colnames(study3a) <- headers
+
+mj <- study3a %>%
+  select(matches("^(COG|COS|MEM|MOOD|PHY)_MJ[1-3]_[0-9]$"), anon_id) %>%
+  mutate(across(-anon_id, as.numeric)) %>%
+  pivot_longer(-anon_id, names_to = "key", values_to = "resp", values_drop_na = TRUE) %>%
+  mutate(
+    scenario = str_sub(key, 1, 3),
+    item     = str_sub(key, -5, -3)            # MJ1, MJ2, MJ3
+  ) %>%
+  group_by(anon_id, scenario, item) %>%
+  summarise(resp = mean(resp, na.rm = TRUE), .groups = "drop") %>%
+  pivot_wider(names_from = item, values_from = resp, id_cols = c(anon_id, scenario)) %>%
+  mutate(resp = (MJ1 + MJ2 + (100 - MJ3)) / 3,
+         scenario = as.factor(scenario))
+
+mc <- study3a %>%
+  select(matches("^(COG|COS|MEM|MOOD|PHY)_(BE|NOR|EFF|REW)_[0-9]$"), anon_id) %>%
+  mutate(across(-anon_id, as.numeric)) %>%
+  pivot_longer(-anon_id, names_to = "key", values_to = "med", values_drop_na = TRUE) %>%
+  mutate(
+    scenario = str_sub(key, 1, 3),
+    item     = str_extract(key, "BE|NOR|EFF|REW")   # extract the item type
+  ) %>%
+  group_by(anon_id, scenario, item) %>%
+  summarise(med = mean(med, na.rm = TRUE), .groups = "drop") %>%
+  pivot_wider(names_from = item, values_from = med, id_cols = c(anon_id, scenario)) %>%
+  rename(normality = NOR, effort = EFF, reward = REW, body = BE) %>%
+  mutate(scenario = as.factor(scenario))
+
+ivFactors <- study3a %>%
+  select(matches("Internal|Effort|Reward|Normality", ignore.case = FALSE), anon_id) %>%
+  pivot_longer(-anon_id, names_to = "key", values_to = "factorName", values_drop_na = TRUE) %>%
+  mutate(
+    scenario = str_to_upper(str_sub(key, 1, 3)),
+    item     = str_sub(key, 4, -1)
+  ) %>%
+  filter(!is.na(anon_id), anon_id != "64441db380a4f44c2bfec904") %>%   # one excluded participant
+  pivot_wider(names_from = item, values_from = factorName, id_cols = c(anon_id, scenario)) %>%
+  unnest() %>%
+  mutate(scenario = as.factor(scenario))
+
+dtP5 <- full_join(mj, mc, by = c("anon_id", "scenario"))
+dtP5 <- left_join(dtP5, ivFactors, by = c("anon_id", "scenario"))
+
+dtP5 <- dtP5 %>%
+  mutate(
+    Internal  = relevel(factor(Internal),  ref = "External"),
+    Reward    = relevel(factor(Reward),    ref = "Low"),
+    Effort    = relevel(factor(Effort),    ref = "High"),
+    Normality = relevel(factor(Normality), ref = "High")
+  )
+
+
+m_body  <- lmer(scale(body) ~ Internal + (1 | scenario), data = dtP5)
+m_eff   <- lmer(scale(effort) ~ Effort + (1 | scenario), data = dtP5)
+m_norm  <- lmer(scale(normality) ~ Normality + (1 | scenario), data = dtP5)
+m_rew   <- lmer(scale(reward) ~ Reward + (1 | scenario), data = dtP5)
+
+mc_table <- bind_rows(
+  summ(m_body, digits = 3)$coeftable %>% as.data.frame() %>%
+    filter(row.names(.) != "(Intercept)") %>% mutate(check = "Body envelope"),
+  summ(m_eff, digits = 3)$coeftable %>% as.data.frame() %>%
+    filter(row.names(.) != "(Intercept)") %>% mutate(check = "Effort"),
+  summ(m_norm, digits = 3)$coeftable %>% as.data.frame() %>%
+    filter(row.names(.) != "(Intercept)") %>% mutate(check = "Normality"),
+  summ(m_rew, digits = 3)$coeftable %>% as.data.frame() %>%
+    filter(row.names(.) != "(Intercept)") %>% mutate(check = "Reward")
+) %>%
+  select(check, Est., `t val.`, p) %>%
+  rename(beta_std = Est., t_value = `t val.`, p_value = p)
+
+mc_table
+
+
+
+
+## 6.2 Additive model (main effects only)
+add_mod <- lmer(scale(resp) ~ Internal + Normality + Effort + Reward +
+                  (1 | scenario), data = dtP5)
+cat("\n--- Additive model ---\n")
+print(summ(add_mod, digits = 3, confint = TRUE))
+
+## 6.3 Continuous perceptions as predictors
+cont_mod <- lmer(scale(resp) ~ body + normality + effort + reward +
+                   (1 | scenario), data = dtP5)
+cat("\n--- Continuous perception model ---\n")
+print(summ(cont_mod, digits = 3, confint = TRUE))
+
+## 6.4 Exploratory: Internal → perceived effort / reward
+eff_internal <- lmer(scale(effort) ~ Internal + Normality + Effort + Reward +
+                       (1 | scenario), data = dtP5)
+rew_internal <- lmer(scale(reward) ~ Internal + Normality + Effort + Reward +
+                       (1 | scenario), data = dtP5)
+
+cat("\n--- Internal on perceived effort ---\n")
+print(summ(eff_internal, digits = 3)$coeftable %>%
+        as.data.frame() %>% filter(row.names(.) == "InternalInternal"))
+
+cat("\n--- Internal on perceived reward ---\n")
+print(summ(rew_internal, digits = 3)$coeftable %>%
+        as.data.frame() %>% filter(row.names(.) == "InternalInternal"))
+
+
+
+
+
+
+
+# ---- 2. Additive model (main effects only) ----
+add_mod <- lmer(scale(resp) ~ Internal + Normality + Effort + Reward + 
+                  (1 | scenario), data = dtP5)
+cat("\n--- Additive model ---\n")
+print(summ(add_mod, digits = 3, confint = TRUE))
+
+# ---- 3. Continuous perception predictors of moral judgment ----
+cont_mod <- lmer(scale(resp) ~ body + normality + effort + reward + 
+                   (1 | scenario), data = dtP5)
+cat("\n--- Continuous perception model ---\n")
+print(summ(cont_mod, digits = 3, confint = TRUE))
+
+# ---- 4. Exploratory: Does Internal/External shift perceived effort and reward? ----
+# (Controlling for the other manipulations)
+eff_by_internal <- lmer(scale(effort) ~ Internal + Normality + Effort + Reward + 
+                          (1 | scenario), data = dtP5)
+rew_by_internal <- lmer(scale(reward) ~ Internal + Normality + Effort + Reward + 
+                          (1 | scenario), data = dtP5)
+
+cat("\n--- Effect of Internal on perceived effort ---\n")
+print(summ(eff_by_internal, digits = 3)$coeftable %>% 
+        as.data.frame() %>% filter(row.names(.) == "InternalInternal"))
+cat("\n--- Effect of Internal on perceived reward ---\n")
+print(summ(rew_by_internal, digits = 3)$coeftable %>% 
+        as.data.frame() %>% filter(row.names(.) == "InternalInternal"))
+
+library(tidyverse)
+
+# Check structure
+glimpse(study3a)
+
+# If columns are character, convert all MJ columns to numeric. 
+study3a <- study3a %>% mutate(across(contains('MJ'), as.numeric))
+
+# Then create mj
+mj <- study3a %>%
+  select(contains('MJ'), anon_id) %>%
+  pivot_longer(-anon_id, names_to = "key", values_to = "resp", values_drop_na = TRUE) %>%
+  mutate(scenario = str_sub(key, 1, 3),
+         item = str_sub(key, -5, -3)) %>%
+  filter(!is.na(anon_id)) %>%
+  # if duplicates exist, we can take the mean or first; assuming duplicates are identical.
+  group_by(anon_id, scenario, item) %>%
+  summarise(resp = mean(resp, na.rm = TRUE), .groups = "drop") %>%
+  pivot_wider(names_from = item, values_from = resp, id_cols = c(anon_id, scenario)) %>%
+  mutate(resp = (MJ1 + MJ2 + (100 - MJ3))/3)
+
+# Moral judgment composite
+mj <- study3a %>%
+  select(contains('MJ'), anon_id) %>%
+  gather(-anon_id, key = 'key', value = 'resp', na.rm = TRUE) %>%
+  mutate(scenario = str_sub(key, 1, 3), 
+         item = str_sub(key, -5, -3)) %>%
+  filter(!is.na(anon_id)) %>%
+  pivot_wider(names_from = 'item', values_from = 'resp', 
+              id_cols = c('anon_id', 'scenario')) %>%
+  mutate(resp = (MJ1 + MJ2 + (100 - MJ3))/3)
+mj$scenario <- as.factor(mj$scenario)
+
+# Manipulation check ratings: effort, normality, reward, body envelope
+mc <- study3a %>%
+  select(matches("_BE|_NOR|_EFF|_REW", ignore.case = FALSE), anon_id) %>%
+  gather(-anon_id, key = 'key', value = 'med', na.rm = TRUE) %>%
+  mutate(scenario = str_sub(key, 1, 3), 
+         item = as.factor(str_sub(key, -5, -3))) %>%
+  filter(!is.na(anon_id)) %>%
+  pivot_wider(names_from = 'item', values_from = 'med', 
+              id_cols = c('anon_id', 'scenario')) %>%
+  mutate(BE = if_else(is.na(`_BE`), `BE `, `_BE`)) %>%
+  select(-`BE `, -`_BE`) %>%
+  rename('normality' = NOR, 'effort' = EFF, 'reward' = REW, 'body' = 'BE')
+mc$scenario <- as.factor(mc$scenario)
+
+# Cheating and fairness (not used in core models, but kept if needed)
+cheat <- p5 %>%
+  select(contains('_FAIR'), contains('_CHEAT'), anon_id) %>%
+  gather(-anon_id, key = 'key', value = 'resp', na.rm = TRUE) %>%
+  mutate(scenario = str_sub(key, 1, 3), 
+         item = str_sub(key, 5, 8)) %>%
+  filter(!is.na(anon_id)) %>%
+  pivot_wider(names_from = 'item', values_from = 'resp', 
+              id_cols = c('anon_id', 'scenario')) %>% 
+  mutate(fair = if_else(is.na(FAIR), `_FAI`, FAIR),
+         cheat = if_else(is.na(CHEA), `_CHE`, CHEA)) %>%
+  select(anon_id, scenario, fair, cheat)
+
+# Merge moral judgment, manipulation checks, and cheat/fair
+dtP5 <- full_join(mj, mc, by = c('anon_id', 'scenario'))
+dtP5 <- full_join(dtP5, cheat, by = c('anon_id', 'scenario'))
+
+# IV factor labels (Internal vs External, High/Low effort, etc.)
+ivFactors <- p5 %>%
+  select(matches("Internal|Effort|Reward|Normality", ignore.case = FALSE), 
+         anon_id) %>%
+  gather(-anon_id, key = 'key', value = 'factorName', na.rm = TRUE) %>%
+  mutate(scenario = str_to_upper(str_sub(key, 1, 3)), 
+         item = str_sub(key, 4, -1)) %>%
+  filter(!is.na(anon_id), 
+         anon_id != '64441db380a4f44c2bfec904') %>%  # excluded participant
+  pivot_wider(names_from = 'item', values_from = 'factorName', 
+              id_cols = c('anon_id', 'scenario')) %>%
+  unnest()
+ivFactors$scenario <- as.factor(ivFactors$scenario)
+
+# Merge IV factors into main dataset
+dtP5 <- left_join(dtP5, ivFactors, by = c('anon_id', 'scenario'))
+
+# Additional single-item ratings (not central to main models)
+sc <- p5 %>%
+  select(matches("_NAT|_SAFE|_FAIR|_CHEAT|_VALUE|_UTIL", ignore.case = FALSE), 
+         anon_id) %>%
+  gather(-anon_id, key = 'key', value = 'med', na.rm = TRUE) %>%
+  mutate(scenario = str_sub(key, 1, 3), 
+         item = as.factor(str_sub(key, -5, -3))) %>%
+  filter(!is.na(anon_id)) %>%
+  pivot_wider(names_from = 'item', values_from = 'med', 
+              id_cols = c('anon_id', 'scenario')) %>%
+  mutate(AIR = if_else(is.na(AIR), `IR `, AIR)) %>%
+  select(-`IR `) %>%
+  rename('safe' = AFE, 'fair' = AIR, 'cheat' = EAT, 'natural' = NAT, 
+         'value' = LUE, 'conseq' = TIL)
+dtP5 <- left_join(dtP5, sc, by = c('anon_id', 'scenario'))
+
+# Factor levels for correct reference categories in models
+dtP5$Internal  <- relevel(factor(dtP5$Internal),  ref = 'External')
+dtP5$Reward    <- relevel(factor(dtP5$Reward),    ref = 'Low')
+dtP5$Effort    <- relevel(factor(dtP5$Effort),    ref = 'High')
+dtP5$Normality <- relevel(factor(dtP5$Normality), ref = 'High')
+
+# ---- 1. Manipulation checks ----
+# Each DV ~ corresponding IV, with random intercept for scenario.
+# DV scaled to obtain semi-standardized coefficients.
+
+mcheck_body <- lmer(scale(body) ~ Internal + (1 | scenario), data = dtP5)
+mcheck_eff  <- lmer(scale(effort) ~ Effort + (1 | scenario), data = dtP5)
+mcheck_norm <- lmer(scale(normality) ~ Normality + (1 | scenario), data = dtP5)
+mcheck_rew  <- lmer(scale(reward) ~ Reward + (1 | scenario), data = dtP5)
+
+# Extract coefficients, t-values, p-values
+mc_results <- bind_rows(
+  summ(mcheck_body, digits = 3)$coeftable %>% as.data.frame() %>% 
+    filter(row.names(.) != "(Intercept)") %>% 
+    mutate(check = "Body envelope"),
+  summ(mcheck_eff, digits = 3)$coeftable %>% as.data.frame() %>% 
+    filter(row.names(.) != "(Intercept)") %>% 
+    mutate(check = "Effort"),
+  summ(mcheck_norm, digits = 3)$coeftable %>% as.data.frame() %>% 
+    filter(row.names(.) != "(Intercept)") %>% 
+    mutate(check = "Normality"),
+  summ(mcheck_rew, digits = 3)$coeftable %>% as.data.frame() %>% 
+    filter(row.names(.) != "(Intercept)") %>% 
+    mutate(check = "Reward")
+) %>%
+  select(check, Est., t.val., p) %>%
+  rename(beta_std = Est., t_value = t.val., p_value = p)
+
+print("Manipulation checks (semi-standardised):")
+print(mc_results)
+
+# ---- 2. Additive model (main effects only) ----
+# Moral judgment regressed on all four factors, DV scaled.
+add_mod <- lmer(scale(resp) ~ Internal + Normality + Effort + Reward + 
+                  (1 | scenario), data = dtP5)
+cat("\nAdditive model:\n")
+print(summ(add_mod, digits = 3, confint = TRUE))
+
+# ---- 3. Continuous perception predictors of moral judgment ----
+# (effort, reward ratings as predictors)
+cont_mod <- lmer(scale(resp) ~ body + normality + effort + reward + 
+                   (1 | scenario), data = dtP5)
+cat("\nContinuous perception model:\n")
+print(summ(cont_mod, digits = 3, confint = TRUE))
+
+# ---- 4. Exploratory: Does Internal/External shift perceived effort and reward? ----
+# Controlling for other manipulations.
+eff_by_internal <- lmer(scale(effort) ~ Internal + Normality + Effort + Reward + 
+                          (1 | scenario), data = dtP5)
+rew_by_internal <- lmer(scale(reward) ~ Internal + Normality + Effort + Reward + 
+                          (1 | scenario), data = dtP5)
+
+cat("\nEffect of Internal on perceived effort:\n")
+print(summ(eff_by_internal, digits = 3)$coeftable %>% 
+        as.data.frame() %>% filter(row.names(.) == "InternalInternal"))
+cat("\nEffect of Internal on perceived reward:\n")
+print(summ(rew_by_internal, digits = 3)$coeftable %>% 
+        as.data.frame() %>% filter(row.names(.) == "InternalInternal"))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+rm(list = ls())  
+
 library(tidyverse)
 library(readxl)
 
-filename = "study3a/study3a.csv"
+filename = "data/study3a/study3a_anon.csv"
 headers = read_csv(filename, col_names = FALSE, n_max = 1)
 p5 = read_csv(filename, skip = 3, col_names = FALSE)
 colnames(p5)= headers
@@ -9,27 +334,27 @@ colnames(p5)= headers
 glimpse(p5)
 
 mj = p5 %>%
-  select(contains('MJ'), PROLIFIC_PID) %>%
-  gather(-PROLIFIC_PID, key = 'key', value = 'resp', na.rm = TRUE) %>%
+  select(contains('MJ'), anon_id) %>%
+  gather(-anon_id, key = 'key', value = 'resp', na.rm = TRUE) %>%
   mutate(scenario = str_sub(key, 1, 3), 
          item = str_sub(key, -5, -3)) %>%
-  filter(!is.na(PROLIFIC_PID)) %>%
-  pivot_wider(names_from = 'item', values_from = 'resp', id_cols = c('PROLIFIC_PID', 'scenario')) %>%
+  filter(!is.na(anon_id)) %>%
+  pivot_wider(names_from = 'item', values_from = 'resp', id_cols = c('anon_id', 'scenario')) %>%
   mutate(resp = (MJ1 + MJ2 + (100 - MJ3))/3)
 
 mj$scenario = as.factor(mj$scenario)
 levels(mj$scenario)
 
 cheat = p5 %>%
-  select(contains('_FAIR'), contains('_CHEAT'), PROLIFIC_PID) %>%
-  gather(-PROLIFIC_PID, key = 'key', value = 'resp', na.rm = TRUE) %>%
+  select(contains('_FAIR'), contains('_CHEAT'), anon_id) %>%
+  gather(-anon_id, key = 'key', value = 'resp', na.rm = TRUE) %>%
   mutate(scenario = str_sub(key, 1, 3), 
          item = str_sub(key, 5, 8)) %>%
-  filter(!is.na(PROLIFIC_PID)) %>%
-  pivot_wider(names_from = 'item', values_from = 'resp', id_cols = c('PROLIFIC_PID', 'scenario')) %>% 
+  filter(!is.na(anon_id)) %>%
+  pivot_wider(names_from = 'item', values_from = 'resp', id_cols = c('anon_id', 'scenario')) %>% 
   mutate(fair = if_else(is.na(FAIR), `_FAI`, FAIR),
          cheat = if_else(is.na(CHEA), `_CHE`, CHEA)) %>%
-  select(PROLIFIC_PID, scenario, fair, cheat)
+  select(anon_id, scenario, fair, cheat)
 
 glimpse(mj)
 
@@ -38,12 +363,12 @@ mj %>%
   summarise(mean(resp, na.rm = TRUE))
 
 mc = p5 %>%
-  select(matches("_BE|_NOR|_EFF|_REW", ignore.case = FALSE), PROLIFIC_PID) %>%
-  gather(-PROLIFIC_PID, key = 'key', value = 'med', na.rm = TRUE) %>%
+  select(matches("_BE|_NOR|_EFF|_REW", ignore.case = FALSE), anon_id) %>%
+  gather(-anon_id, key = 'key', value = 'med', na.rm = TRUE) %>%
   mutate(scenario = str_sub(key, 1, 3), 
          item = as.factor(str_sub(key, -5, -3))) %>%
-  filter(!is.na(PROLIFIC_PID)) %>%
-  pivot_wider(names_from = 'item', values_from = 'med', id_cols = c('PROLIFIC_PID', 'scenario')) %>%
+  filter(!is.na(anon_id)) %>%
+  pivot_wider(names_from = 'item', values_from = 'med', id_cols = c('anon_id', 'scenario')) %>%
   mutate(BE = if_else(is.na(`_BE`), `BE `, `_BE`)) %>%
   select(-`BE `, -`_BE`) %>%
   rename('normality' = NOR, 'effort' = EFF, 'reward' = REW, 'body' = 'BE')
@@ -51,18 +376,18 @@ mc = p5 %>%
 mc$scenario = as.factor(mc$scenario)
 levels(mc$scenario)
 
-dtP5 = full_join(mj, mc, by = c('PROLIFIC_PID', 'scenario'))
+dtP5 = full_join(mj, mc, by = c('anon_id', 'scenario'))
 
 
-dtP5b = full_join(dtP5, cheat, by = c('PROLIFIC_PID', 'scenario'))
+dtP5b = full_join(dtP5, cheat, by = c('anon_id', 'scenario'))
 
 ivFactors = p5 %>%
-  select(matches("Internal|Effort|Reward|Normality", ignore.case = FALSE), PROLIFIC_PID) %>%
-  gather(-PROLIFIC_PID, key = 'key', value = 'factorName', na.rm = TRUE) %>%
+  select(matches("Internal|Effort|Reward|Normality", ignore.case = FALSE), anon_id) %>%
+  gather(-anon_id, key = 'key', value = 'factorName', na.rm = TRUE) %>%
   mutate(scenario = str_to_upper(str_sub(key, 1, 3)), 
          item = str_sub(key, 4, -1)) %>%
-  filter(!is.na(PROLIFIC_PID), PROLIFIC_PID != '64441db380a4f44c2bfec904') %>%
-  pivot_wider(names_from = 'item', values_from = 'factorName', id_cols = c('PROLIFIC_PID', 'scenario')) %>%
+  filter(!is.na(anon_id), anon_id != '64441db380a4f44c2bfec904') %>%
+  pivot_wider(names_from = 'item', values_from = 'factorName', id_cols = c('anon_id', 'scenario')) %>%
   unnest()
 
 glimpse(ivFactors)
@@ -70,22 +395,22 @@ glimpse(ivFactors)
 ivFactors$scenario = as.factor(ivFactors$scenario)
 levels(ivFactors$scenario)
 
-dtP5 = left_join(dtP5, ivFactors, by = c('PROLIFIC_PID', 'scenario'))
+dtP5 = left_join(dtP5, ivFactors, by = c('anon_id', 'scenario'))
 
 glimpse(dtP5)
 
 sc = p5 %>%
-  select(matches("_NAT|_SAFE|_FAIR|_CHEAT|_VALUE|_UTIL", ignore.case = FALSE), PROLIFIC_PID) %>%
-  gather(-PROLIFIC_PID, key = 'key', value = 'med', na.rm = TRUE) %>%
+  select(matches("_NAT|_SAFE|_FAIR|_CHEAT|_VALUE|_UTIL", ignore.case = FALSE), anon_id) %>%
+  gather(-anon_id, key = 'key', value = 'med', na.rm = TRUE) %>%
   mutate(scenario = str_sub(key, 1, 3), 
          item = as.factor(str_sub(key, -5, -3))) %>%
-  filter(!is.na(PROLIFIC_PID)) %>%
-  pivot_wider(names_from = 'item', values_from = 'med', id_cols = c('PROLIFIC_PID', 'scenario')) %>%
+  filter(!is.na(anon_id)) %>%
+  pivot_wider(names_from = 'item', values_from = 'med', id_cols = c('anon_id', 'scenario')) %>%
   mutate(AIR = if_else(is.na(AIR), `IR `, AIR)) %>%
   select(-`IR `) %>%
   rename('safe' = AFE, 'fair' = AIR, 'cheat' = EAT, 'natural' = NAT, 'value' = LUE, 'conseq' = TIL)
 
-dtP5 = left_join(dtP5, sc, by = c('PROLIFIC_PID', 'scenario'))
+dtP5 = left_join(dtP5, sc, by = c('anon_id', 'scenario'))
 
 sumdt5 = dtP5 %>%
   group_by(Effort, Reward, Normality, Internal, scenario) %>%

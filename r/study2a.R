@@ -176,4 +176,4 @@ fig3 <- tempdt %>%
         plot.margin = margin(0.3,1,0.3, 1, "cm"),
         legend.title = element_text(size = 10))
 
-ggsave('Figures/Figure3.png', dpi = 300, width = 17, height = 13, units = 'cm')
+ggsave('figures/figure3.png', dpi = 300, width = 17, height = 13, units = 'cm')
