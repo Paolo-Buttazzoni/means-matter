@@ -13,8 +13,7 @@ library(ggpubr)
 
 # Load raw data
 source("r/functions.R")
-mm1a_raw <- read_qualtrics('data/study1a/study1a_anon.csv')
-
+mm1raw <- read_qualtrics('data/study1a/study1a_anon.csv')
 
 
 # Filter to complete responses
@@ -37,7 +36,7 @@ mm1demog = mm1raw %>%
   select(ResponseId, Order, Methods, Age, Gender, Endorsement, endorsement_num, 
          Bipolar, Conservatism, Social, Fiscal, Religiosity)
 
-mm1resp = mm1rAgemm1resp = mm1raw %>%
+mm1resp = mm1raw %>%
   select(., contains(c("C1","C2", "C3", "C4", "T1", "T2", "T3", "T4")), ResponseId) %>%
   gather(-ResponseId, key = 'key', value = 'resp', na.rm = TRUE) %>%
   mutate(scen = str_sub(key, 1, 3),
